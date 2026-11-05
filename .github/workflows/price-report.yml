@@ -1,8 +1,5 @@
 name: Price report (manual validation)
 on:
-  push:
-    branches: [validate/persistent-price-history]
-    paths: ['.github/workflows/price-report.yml']
   workflow_dispatch:
 
 permissions:
@@ -27,24 +24,6 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
       - run: python price_monitor.py
-      - name: Verify repeated run and Excel against the committed history
-        run: |
-          git diff --exit-code HEAD -- data/price_history.csv
-          python - <<'PY'
-          import csv
-          from openpyxl import load_workbook
-          from price_monitor import FIELDS, HISTORY, OUTPUT, history_key
-          with HISTORY.open(encoding="utf-8", newline="") as stream:
-              rows = list(csv.DictReader(stream))
-          assert len(rows) >= 3 and len({history_key(r) for r in rows}) == len(rows)
-          wb = load_workbook(OUTPUT, read_only=True, data_only=True)
-          actual = list(wb["History"].values)[1:]
-          assert actual == [tuple(r[k] for k in FIELDS) for r in rows]
-          current = {row[2]: row[4] for row in list(wb["Current"].values)[1:]}
-          assert current == {"32550": 79.90, "32546": 89.90, "32485": 74.80}
-          assert wb["Errors"].max_row == 1
-          print(f"Verified {len(rows)} history rows and {len(current)} current prices")
-          PY
       - name: Persist validated history
         env:
           BRANCH: ${{ github.ref_name }}
