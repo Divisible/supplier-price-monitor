@@ -19,11 +19,11 @@ ROOT = Path(__file__).resolve().parent
 HISTORY = ROOT / "data" / "price_history.csv"
 OUTPUT = ROOT / "output" / "Supplier_Prices.xlsx"
 FIELDS = ["date", "checked_at", "supplier", "sku", "product", "currency", "price", "url"]
-PRICE_PATTERN = re.compile(r"^\\s*(\\d{1,6})(?:[,.](\\d{1,2}))?\\s*грн\\s*$", re.I)
+PRICE_PATTERN = re.compile(r"^\s*(\d{1,6})(?:[,.](\d{1,2}))?\s*грн\s*$", re.I)
 
 
 def parse_price(raw):
-    raw = raw.replace("\\xa0", " ").strip()
+    raw = raw.replace("\xa0", " ").strip()
     match = PRICE_PATTERN.fullmatch(raw)
     if not match:
         raise ValueError(f"Ambiguous price text: {raw!r}")
