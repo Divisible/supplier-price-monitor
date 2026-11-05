@@ -112,22 +112,30 @@ def main():
                 title = page.title().casefold()
                 if product["product"].split(",")[0].casefold() not in title:
                     raise ValueError(f"Product title mismatch: {title[:120]}")
-                # Restrict to the first visible price candidate. Fail closed if
-                # markup changes; inspect screenshots before enabling scheduling.
-                candidates = page.locator('[itemprop="price"], [class*="price"], [data-testid*="price"]')
-                price = None
-                for idx in range(min(candidates.count(), 12)):
-                    node = candidates.nth(idx)
-                    if not node.is_visible():
-                        continue
-                    raw = node.inner_text(timeout=3000).strip()
-                    try:
-                        price = parse_price(raw)
-                        break
-                    except ValueError:
-                        continue
-                if price is None or price <= 0:
-                    raise ValueError("No unambiguous visible price found")
+                # Scope extraction to the product detail section, never site-wide
+                # recommendations or other cards.
+                details = page.locator("h1").first.evaluate("""(heading, sku) => {
+                    let node = heading;
+                    for (let depth = 0; depth < 7 && node; depth++, node = node.parentElement) {
+                        const text = node.innerText || "";
+                        if (text.includes(sku) && text.length < 2500 && /грн/.test(text)) {
+                            return text;
+                        }
+                    }
+                    return null;
+                }""", sku)
+                if not details:
+                    raise ValueError("Cannot isolate product details containing title, SKU and price")
+                sku_position = details.find(sku)
+                tail = details[sku_position + len(sku):]
+                # The visible product price follows the SKU and unit label.
+                # Reject pages whose layout no longer follows that structure.
+                match = re.search(r"(?:кг|шт|л|г)\\s*\\n+\\s*(\\d{1,6}(?:[,.]\\d{1,2})?)\\s*грн", tail[:250], re.I)
+                if not match:
+                    raise ValueError(f"Cannot isolate main product price near SKU: {tail[:180]!r}")
+                price = parse_price(match.group(1) + " грн")
+                if price <= 0:
+                    raise ValueError("Invalid non-positive price")
                 record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
                               sku=sku, product=product["product"], currency=product["currency"],
                               price=str(price.quantize(Decimal("0.01"))), url=product["url"])
