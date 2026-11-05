@@ -130,10 +130,10 @@ def main():
                 tail = details[sku_position + len(sku):]
                 # The visible product price follows the SKU and unit label.
                 # Reject pages whose layout no longer follows that structure.
-                match = re.search(r"(?:кг|шт|л|г)\\s*\\n+\\s*(\\d{1,6}(?:[,.]\\d{1,2})?)\\s*грн", tail[:250], re.I)
+                match = re.search(r"(?:кг|шт|л|г)\\s*\\n+\\s*(\\d{1,5})\\s*\\n+\\s*(\\d{2})\\s*грн", tail[:250], re.I)
                 if not match:
                     raise ValueError(f"Cannot isolate main product price near SKU: {tail[:180]!r}")
-                price = parse_price(match.group(1) + " грн")
+                price = Decimal(match.group(1) + "." + match.group(2))
                 if price <= 0:
                     raise ValueError("Invalid non-positive price")
                 record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
