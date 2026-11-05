@@ -1,19 +1,21 @@
-# Fora price collector — diagnostic pilot
+# Fora price monitor — pilot
 
-This initial version **does not extract verified prices** and **does not create a price history**. It opens the three product pages and captures text, potential price fields and screenshots for validation.
+This is a **diagnostic pilot**, not yet an automated price history. It collects rendered page text, candidate price fields, and screenshots from the three URLs in `products.csv`. No unverified prices are saved.
 
-## Run on your Windows PC
+## Run on Windows
+
 1. Install Python 3.11+.
-2. Download the repository as a ZIP from GitHub or clone it.
-3. Open a terminal in the project folder.
-4. Run:
-   ```powershell
-   py -m pip install -r requirements.txt
-   py -m playwright install chromium
-   py collector.py
-   ```
-5. Send the resulting `diagnostics.json` and screenshots (`32550.png`, `32546.png`, `32485.png`) for review.
+2. Download this branch as ZIP or clone the repository.
+3. Open a terminal in the extracted project directory and run:
 
-Do not add passwords, access tokens or personal information to this repository.
+```powershell
+py -m pip install -r requirements.txt
+py -m playwright install chromium
+py collector.py
+```
 
-**Next:** validate selectors and meaning of the displayed price, then implement history + XLSX output and an automated schedule. Running daily before the selector is verified risks recording incorrect prices.
+4. Share `diagnostics.json` and the three product screenshots for review. These files are ignored by Git. Check that the diagnostics contain no personal information before sharing.
+
+## Next
+
+Validate price selectors and whether site prices depend on region. Only then add XLSX history, automated schedule and notifications. Do not store secrets in this repo.
