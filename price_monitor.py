@@ -6,7 +6,7 @@ title matches the expected product. No fabricated values on failures.
 import csv
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -40,15 +40,35 @@ def load_history():
     if not HISTORY.exists():
         return []
     with HISTORY.open(encoding="utf-8", newline="") as stream:
-        return list(csv.DictReader(stream))
+        reader = csv.DictReader(stream, strict=True)
+        if reader.fieldnames != FIELDS:
+            raise ValueError("Invalid history header")
+        rows = list(reader)
+    keys = set()
+    for row in rows:
+        if None in row or not all(row.values()):
+            raise ValueError("Incomplete history row")
+        date.fromisoformat(row["date"])
+        price = Decimal(row["price"])
+        key = history_key(row)
+        if not price.is_finite() or price <= 0 or key in keys:
+            raise ValueError(f"Invalid or duplicate history row: {key}")
+        keys.add(key)
+    return rows
+
+
+def history_key(row):
+    return row["date"], row["supplier"], row["sku"]
 
 
 def save_history(rows):
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
-    with HISTORY.open("w", encoding="utf-8", newline="") as stream:
+    temporary = HISTORY.with_suffix(".csv.tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS)
         writer.writeheader()
         writer.writerows(rows)
+    temporary.replace(HISTORY)
 
 
 def make_report(history, errors):
@@ -96,6 +116,8 @@ def main():
     with (ROOT / "products.csv").open(encoding="utf-8-sig", newline="") as stream:
         products = list(csv.DictReader(stream))
     history = load_history()
+    keys = {history_key(row) for row in history}
+    additions = []
     errors = []
     now = datetime.now(ZoneInfo("Europe/Kyiv"))
     today = now.date().isoformat()
@@ -139,16 +161,20 @@ def main():
                 record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
                               sku=sku, product=product["product"], currency=product["currency"],
                               price=str(price.quantize(Decimal("0.01"))), url=product["url"])
-                history = [r for r in history if not (r["date"] == today and r["supplier"] == product["supplier"] and r["sku"] == sku)]
-                history.append(record)
+                key = history_key(record)
+                if key not in keys:
+                    additions.append(record)
+                    keys.add(key)
                 print(f"{sku}: {record['price']} UAH")
             except Exception as exc:
                 errors.append(dict(supplier=product["supplier"], sku=sku, product=product["product"],
                                    url=product["url"], error=str(exc)))
                 print(f"{sku}: ERROR {exc}")
         browser.close()
-    history.sort(key=lambda r: (r["date"], r["supplier"], r["sku"]))
-    save_history(history)
+    if additions and not errors:
+        history.extend(additions)
+        history.sort(key=history_key)
+        save_history(history)
     make_report(history, errors)
     print(f"Report: {OUTPUT}; errors: {len(errors)}")
     if errors:
