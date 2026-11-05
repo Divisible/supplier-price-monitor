@@ -1,0 +1,4 @@
+date,checked_at,supplier,sku,product,currency,price,url
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32485,"Банан, кг",UAH,74.80,https://fora.ua/product/banan-32485
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550
