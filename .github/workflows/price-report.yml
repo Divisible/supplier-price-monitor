@@ -1,6 +1,9 @@
-name: Price report (manual validation)
+name: Daily supplier price report
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'
+      timezone: Europe/Kyiv
 
 permissions:
   contents: write
@@ -47,3 +50,42 @@ jobs:
             data/price_history.csv
           if-no-files-found: warn
           retention-days: 30
+
+  publish-drive:
+    needs: collect
+    if: github.ref == 'refs/heads/main' && vars.DRIVE_FILE_ID != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: supplier-prices
+          path: report
+      - name: Authenticate to Google Drive
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive
+          create_credentials_file: false
+      - name: Update the existing Excel file
+        env:
+          DRIVE_FILE_ID: ${{ vars.DRIVE_FILE_ID }}
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          [[ "$DRIVE_FILE_ID" =~ ^[A-Za-z0-9_-]+$ ]]
+          curl --fail-with-body --silent --show-error --retry 2 \
+            --request PATCH --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --header 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' \
+            --data-binary @report/output/Supplier_Prices.xlsx \
+            "https://www.googleapis.com/upload/drive/v3/files/$DRIVE_FILE_ID?uploadType=media&fields=id,md5Checksum" > response.json
+          checksum=$(md5sum report/output/Supplier_Prices.xlsx | cut -d' ' -f1)
+          jq -e --arg id "$DRIVE_FILE_ID" --arg md5 "$checksum" '.id == $id and .md5Checksum == $md5' response.json
