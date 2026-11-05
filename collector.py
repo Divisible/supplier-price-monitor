@@ -1,27 +1,30 @@
-"""Pilot: capture rendered information for manual price validation."""
+"""Pilot: collect rendered diagnostics, without guessing prices."""
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent
-rows = list(load_workbook(ROOT / "products.xlsx", read_only=True, data_only=True)["Товары"].values)[1:]
+with (ROOT / "products.csv").open(encoding="utf-8-sig", newline="") as f:
+    products = list(csv.DictReader(f))
 results = []
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page(locale="uk-UA", timezone_id="Europe/Kyiv", viewport={"width": 1365, "height": 900})
-    for row in rows:
-        supplier, sku, name, url, *_ = row
+    for item in products:
+        url = item["url"].strip()
         if not url:
             continue
+        sku = item["sku"]
         result = {
             "checked_at": datetime.now(ZoneInfo("Europe/Kyiv")).isoformat(),
-            "supplier": supplier, "sku": str(sku), "product": name, "url": url
+            "supplier": item["supplier"], "sku": sku,
+            "product": item["product"], "url": url
         }
         try:
-            response = page.goto(str(url), wait_until="domcontentloaded", timeout=45000)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(6000)
             result["http_status"] = response.status if response else None
             result["title"] = page.title()
