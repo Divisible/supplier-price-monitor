@@ -1,7 +1,7 @@
 """Collect public Fora prices and build a daily XLSX report.
 
-Prices are accepted only from the first visible price element when the page
-title matches the expected product. No fabricated values on failures.
+Prices are accepted only from an unambiguous main-product price block when the
+page title matches the expected product. No fabricated values on failures.
 """
 import csv
 import json
@@ -18,7 +18,8 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent
 HISTORY = ROOT / "data" / "price_history.csv"
 OUTPUT = ROOT / "output" / "Supplier_Prices.xlsx"
-FIELDS = ["date", "checked_at", "supplier", "sku", "product", "currency", "price", "url"]
+LEGACY_FIELDS = ["date", "checked_at", "supplier", "sku", "product", "currency", "price", "url"]
+FIELDS = LEGACY_FIELDS + ["regular_price", "discount_pct", "is_promo"]
 PRICE_PATTERN = re.compile(r"^\s*(\d{1,6})(?:[,.](\d{1,2}))?\s*грн\s*$", re.I)
 
 
@@ -36,23 +37,70 @@ def parse_price(raw):
     return Decimal(major + "." + minor.ljust(2, "0"))
 
 
+
+def promo_fields(price, regular=None):
+    if not price.is_finite() or price <= 0:
+        raise ValueError("Invalid selling price")
+    if regular is None:
+        return dict(regular_price="", discount_pct="0", is_promo="false")
+    if not regular.is_finite() or regular <= price:
+        raise ValueError("Regular price must exceed selling price")
+    discount = ((regular - price) / regular * 100).quantize(Decimal("0.01"))
+    return dict(regular_price=str(regular), discount_pct=str(discount), is_promo="true")
+
+
+def parse_product_prices(details, sku):
+    # Anchor to the SKU/unit and require the complete price block before the
+    # purchase button. Additional price candidates or unfamiliar text fail closed.
+    normalized = details.replace("\xa0", " ").strip()
+    if len(re.findall(r"(?<!\d)" + re.escape(sku) + r"(?!\d)", normalized)) != 1:
+        raise ValueError("Missing or ambiguous product SKU")
+    tail = normalized.split(sku, 1)[1]
+    block, separator, _ = tail.partition("В кошик")
+    if not separator:
+        raise ValueError("Missing purchase button after price")
+    pattern = (
+        r"\s*(?:кг|шт|л|г)\s*\n"
+        r"(?:\s*(?P<regular>\d{1,5}[,.]\d{2})[ \t]*грн\s*\n"
+        r"\s*[-−]\d{1,2}(?:[,.]\d{1,2})?%\s*\n)?"
+        r"\s*(?P<major>\d{1,5})[ \t]*\n"
+        r"\s*(?P<minor>\d{2})[ \t]*грн\s*"
+    )
+    match = re.fullmatch(pattern, block, re.I)
+    if not match:
+        raise ValueError(f"Ambiguous main product price block: {block[:180]!r}")
+    price = Decimal(match["major"] + "." + match["minor"])
+    regular = Decimal(match["regular"].replace(",", ".")) if match["regular"] else None
+    return dict(price=str(price), **promo_fields(price, regular))
+
+
 def load_history():
     if not HISTORY.exists():
         return []
     with HISTORY.open(encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream, strict=True)
-        if reader.fieldnames != FIELDS:
+        if reader.fieldnames not in (LEGACY_FIELDS, FIELDS):
             raise ValueError("Invalid history header")
+        legacy = reader.fieldnames == LEGACY_FIELDS
         rows = list(reader)
     keys = set()
     for row in rows:
-        if None in row or not all(row.values()):
+        if None in row or any(row.get(field) is None for field in reader.fieldnames) or not all(row.get(field) for field in LEGACY_FIELDS):
             raise ValueError("Incomplete history row")
         date.fromisoformat(row["date"])
         price = Decimal(row["price"])
         key = history_key(row)
         if not price.is_finite() or price <= 0 or key in keys:
             raise ValueError(f"Invalid or duplicate history row: {key}")
+        if legacy:
+            # Previous collections did not record whether an offer was promotional.
+            row.update(regular_price="", discount_pct="", is_promo="")
+        else:
+            extra = {field: row[field] for field in FIELDS if field not in LEGACY_FIELDS}
+            if extra != dict(regular_price="", discount_pct="", is_promo=""):
+                regular = Decimal(row["regular_price"]) if row["regular_price"] else None
+                if extra != promo_fields(price, regular):
+                    raise ValueError(f"Inconsistent promotion fields: {key}")
         keys.add(key)
     return rows
 
@@ -71,6 +119,14 @@ def save_history(rows):
     temporary.replace(HISTORY)
 
 
+
+def report_promo(record):
+    regular = float(record["regular_price"]) if record["regular_price"] else None
+    discount = float(record["discount_pct"]) if record["discount_pct"] else None
+    promo = record["is_promo"] == "true" if record["is_promo"] else None
+    return [regular, discount, promo]
+
+
 def make_report(history, errors):
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
@@ -80,14 +136,14 @@ def make_report(history, errors):
     old = wb.create_sheet("History")
     failures = wb.create_sheet("Errors")
     header = ["Date", "Supplier", "SKU", "Product", "Price UAH", "Previous UAH", "Change %", "URL"]
-    current.append(header)
+    current.append(header + ["Regular price UAH", "Discount %", "Is promo"])
     changes.append(header)
-    old.append(["Date", "Checked at", "Supplier", "SKU", "Product", "Currency", "Price", "URL"])
+    old.append(["Date", "Checked at", "Supplier", "SKU", "Product", "Currency", "Price", "URL", "Regular price UAH", "Discount %", "Is promo"])
     failures.append(["Supplier", "SKU", "Product", "Error", "URL"])
     grouped = {}
     for record in history:
         grouped.setdefault((record["supplier"], record["sku"]), []).append(record)
-        old.append([record[k] for k in FIELDS])
+        old.append([record[k] for k in LEGACY_FIELDS] + report_promo(record))
     for records in grouped.values():
         records.sort(key=lambda r: (r["date"], r["checked_at"]))
         last = records[-1]
@@ -96,7 +152,7 @@ def make_report(history, errors):
         prev_price = float(previous["price"]) if previous else None
         change = round((price / prev_price - 1) * 100, 2) if prev_price else None
         row = [last["date"], last["supplier"], last["sku"], last["product"], price, prev_price, change, last["url"]]
-        current.append(row)
+        current.append(row + report_promo(last))
         if previous and change != 0:
             changes.append(row)
     for err in errors:
@@ -107,7 +163,7 @@ def make_report(history, errors):
         for cell in ws[1]:
             cell.fill = PatternFill("solid", fgColor="17365D")
             cell.font = Font(bold=True, color="FFFFFF")
-        for column in "ABCDEFGH":
+        for column in "ABCDEFGHIJK":
             ws.column_dimensions[column].width = 20 if column != "D" else 32
     wb.save(OUTPUT)
 
@@ -148,32 +204,25 @@ def main():
                 }""", sku)
                 if not details:
                     raise ValueError("Cannot isolate product details containing title, SKU and price")
-                sku_position = details.find(sku)
-                tail = details[sku_position + len(sku):]
-                # The visible product price follows the SKU and unit label.
-                # Reject pages whose layout no longer follows that structure.
-                match = re.search(r"(?:кг|шт|л|г)\s*\n+\s*(\d{1,5})\s*\n+\s*(\d{2})\s*грн", tail[:250], re.I)
-                if not match:
-                    raise ValueError(f"Cannot isolate main product price near SKU: {tail[:180]!r}")
-                price = Decimal(match.group(1) + "." + match.group(2))
-                if price <= 0:
-                    raise ValueError("Invalid non-positive price")
+                prices = parse_product_prices(details, sku)
                 record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
                               sku=sku, product=product["product"], currency=product["currency"],
-                              price=str(price.quantize(Decimal("0.01"))), url=product["url"])
+                              url=product["url"], **prices)
                 key = history_key(record)
                 if key not in keys:
                     additions.append(record)
                     keys.add(key)
-                print(f"{sku}: {record['price']} UAH")
+                print(f"{sku}: {record['price']} UAH; regular={record['regular_price']}; "
+                      f"discount={record['discount_pct']}%; promo={record['is_promo']}")
             except Exception as exc:
                 errors.append(dict(supplier=product["supplier"], sku=sku, product=product["product"],
                                    url=product["url"], error=str(exc)))
                 print(f"{sku}: ERROR {exc}")
         browser.close()
-    if additions and not errors:
+    if not errors:
         history.extend(additions)
         history.sort(key=history_key)
+        # Also migrate a legacy file when all observations already exist today.
         save_history(history)
     make_report(history, errors)
     print(f"Report: {OUTPUT}; errors: {len(errors)}")
