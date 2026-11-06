@@ -1,4 +1,7 @@
-date,checked_at,supplier,sku,product,currency,price,url
-2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32485,"Банан, кг",UAH,74.80,https://fora.ua/product/banan-32485
-2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546
-2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550
+date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_pct,is_promo
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32485,"Банан, кг",UAH,74.80,https://fora.ua/product/banan-32485,,,
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546,,,
+2026-11-05,2026-11-05T18:31:20.233073+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,,
+2026-11-06,2026-11-06T20:12:54.455442+02:00,Фора,32485,"Банан, кг",UAH,68.90,https://fora.ua/product/banan-32485,76.90,10.40,true
+2026-11-06,2026-11-06T20:12:54.455442+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546,,0,false
+2026-11-06,2026-11-06T20:12:54.455442+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
