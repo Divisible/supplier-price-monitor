@@ -2,8 +2,9 @@ name: Daily supplier price report
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 9 * * *'
-      timezone: Europe/Kyiv
+    # GitHub Actions schedule uses UTC. 07:17 UTC = 09:17 Kyiv in winter,
+    # and 10:17 Kyiv during daylight saving time.
+    - cron: '17 7 * * *'
 
 permissions:
   contents: write
