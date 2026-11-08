@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import altair as alt
 import pandas as pd
 import streamlit as st
-from ui_style import dashboard_layout, metric_amount, metric_cards, price_tooltip, style_chart, styled_table, supplier_scales
+from spm_ui import dashboard_layout, metric_amount, metric_cards, price_tooltip, style_chart, styled_table, supplier_scales
 
 HISTORY = Path(__file__).resolve().parent / "data" / "price_history.csv"
 KYIV = ZoneInfo("Europe/Kyiv")
