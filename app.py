@@ -80,9 +80,9 @@ def load_history(path=HISTORY):
         raise ValueError("Для скидки отсутствует обычная цена.")
     # Recalculate only when both actual and regular prices are known.
     data.loc[known_regular, "discount_pct"] = calculated[known_regular]
-    if data.duplicated(["date", *KEY]).any():
-        raise ValueError("В CSV есть повторные записи даты, поставщика и SKU.")
-    return data.sort_values([*KEY, "date", "checked_at"]).reset_index(drop=True)
+    daily_key = [*KEY, "date"]
+    return (data.sort_values([*daily_key, "checked_at"], kind="stable")
+            .drop_duplicates(daily_key, keep="last").reset_index(drop=True))
 
 
 def latest_prices(data):
@@ -136,6 +136,14 @@ def show_current_prices(current):
     show_table(current, columns)
 
 
+def daily_axis(dates):
+    dates = dates.drop_duplicates().sort_values()
+    step = max(1, (len(dates) + 7) // 8)
+    ticks = [int(day.timestamp()) * 1000 for day in dates.iloc[::step]]
+    return alt.X("date:T", title="Дата", scale=alt.Scale(type="utc"),
+                 axis=alt.Axis(format="%d.%m.%Y", values=ticks))
+
+
 def show_daily_chart(selected):
     prices = selected[["date", "price", "regular_price"]].rename(columns={
         "price": "Цена продажи", "regular_price": "Обычная цена"})
@@ -145,12 +153,8 @@ def show_daily_chart(selected):
     # Encode Kyiv calendar dates at UTC midnight so the browser cannot shift the day.
     prices["День"] = prices["date"].dt.strftime("%d.%m.%Y")
     prices["date"] = prices["date"].dt.tz_localize("UTC")
-    dates = prices["date"].drop_duplicates().sort_values()
-    step = max(1, (len(dates) + 7) // 8)
-    ticks = [int(day.timestamp()) * 1000 for day in dates.iloc[::step]]
     chart = alt.Chart(prices).mark_line(point=True).encode(
-        x=alt.X("date:T", title="Дата", scale=alt.Scale(type="utc"),
-                axis=alt.Axis(format="%d.%m.%Y", values=ticks)),
+        x=daily_axis(prices["date"]),
         y=alt.Y("Цена:Q", title="грн", scale=alt.Scale(zero=False)),
         color="Тип цены:N",
         tooltip=["День:N", "Тип цены:N", alt.Tooltip("Цена:Q", format=".2f")],
@@ -158,12 +162,91 @@ def show_daily_chart(selected):
     st.altair_chart(chart.properties(height=320), width="stretch")
 
 
+MATCH_LABELS = {"exact": "Точное", "equivalent": "Сопоставимое", "unmatched": "Без соответствия"}
+
+
+def load_mapping():
+    root = HISTORY.parent.parent
+    fields = ["product_id", "canonical_name", *KEY, "unit", "match_type"]
+    mapping = pd.read_csv(root / "product_mapping.csv", dtype=str, keep_default_na=False,
+                          usecols=fields).apply(lambda col: col.str.strip())
+    catalog = pd.read_csv(root / "products.csv", dtype=str, usecols=KEY, keep_default_na=False)
+    if (mapping.empty or mapping.eq("").any().any() or mapping.duplicated(KEY).any()
+            or not mapping["match_type"].isin(MATCH_LABELS).all()
+            or not mapping.set_index(KEY).index.isin(catalog.set_index(KEY).index).all()):
+        raise ValueError("Проверьте поля, типы соответствия и пары поставщик/SKU в справочнике.")
+    comparable = mapping[mapping["match_type"] != "unmatched"]
+    if (mapping.groupby("product_id")["canonical_name"].nunique().gt(1).any()
+            or comparable.groupby("product_id")["unit"].nunique().gt(1).any()
+            or comparable.duplicated(["product_id", "supplier"]).any()):
+        raise ValueError("Неоднозначная группа товаров или разные единицы измерения.")
+    return mapping
+
+
+def show_comparison(data, today):
+    try:
+        mapping = load_mapping()
+    except (OSError, ValueError) as exc:
+        st.warning(f"Сравнение недоступно. {exc}")
+        return
+    names = mapping.set_index("product_id")["canonical_name"].to_dict()
+    left, right = st.columns([2, 1])
+    product_id = left.selectbox("Главный товар", list(names), format_func=names.get)
+    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"], index=1)
+    group = mapping.loc[mapping["product_id"].eq(product_id) & mapping["match_type"].ne("unmatched")]
+    if group.empty:
+        st.info("Для этого товара нет сопоставимых позиций.")
+        return
+    rows = data.merge(group, on=KEY, validate="many_to_one").sort_values(["supplier", "date"])
+    rows = rows[rows["date"].dt.date <= today]
+    latest = group.merge(rows.groupby("supplier").tail(1)[[*KEY, "date", "price"]], on=KEY, how="left")
+    latest["Соответствие"] = latest["match_type"].map(MATCH_LABELS)
+    fresh = latest["date"].ge(pd.Timestamp(today - timedelta(days=1)))
+    columns = ["supplier", "sku", "price", "date", "Соответствие"]
+    st.subheader("Актуальные цены")
+    st.caption("Учитываются наблюдения за сегодня и вчера по Киеву. Разница в процентах рассчитана от минимальной цены.")
+    if fresh.any():
+        prices = latest.loc[fresh, "price"]
+        low, high = prices.min(), prices.max()
+        metrics = st.columns(4)
+        metrics[0].metric("Минимум у поставщиков", f"{low:.2f} ₴")
+        metrics[1].metric("Максимум у поставщиков", f"{high:.2f} ₴")
+        spread = high - low
+        metrics[2].metric("Разница, грн", f"{spread:.2f}" if len(prices) > 1 else "—")
+        metrics[3].metric("Разница, %", f"{100 * spread / low:.2f}" if len(prices) > 1 else "—")
+        show_table(latest.loc[fresh], columns)
+    if (~fresh).any():
+        st.warning("У этих поставщиков наблюдение устарело или отсутствует. Их цены исключены из показателей.")
+        show_table(latest.loc[~fresh], columns)
+
+    st.subheader("История цен поставщиков")
+    if period != "Весь период":
+        start = today - timedelta(days=int(period.split()[0]) - 1)
+        rows = rows.loc[rows["date"].dt.date >= start]
+    if rows.empty:
+        st.info("За выбранный период наблюдений нет.")
+        return
+    table = rows.pivot(index="date", columns="supplier", values="price").reindex(columns=group["supplier"])
+    # Each sequence of consecutive observations gets its own line.
+    gaps = rows.groupby("supplier")["date"].diff().dt.days.ne(1)
+    rows = rows.assign(segment=gaps.cumsum(), День=rows["date"].dt.strftime("%d.%m.%Y"),
+                       date=rows["date"].dt.tz_localize("UTC"))
+    chart = alt.Chart(rows).mark_line(point=True).encode(
+        x=daily_axis(rows["date"]), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
+                                          scale=alt.Scale(zero=False)),
+        color=alt.Color("supplier:N", title="Поставщик"), detail="segment:N",
+        tooltip=["День:N", alt.Tooltip("supplier:N", title="Поставщик"),
+                 alt.Tooltip("price:Q", title="Цена, грн", format=".2f")])
+    st.altair_chart(chart.properties(height=320), width="stretch")
+    show_table(table.reset_index(), ["date", *table.columns])
+
+
 def main():
     st.set_page_config(page_title="SPM", page_icon="📊", layout="wide")
     st.title("SPM")
     st.caption("Цены поставщиков · история наблюдений · промоакции")
     st.button("Обновить данные", help="Повторно прочитать доступный приложению CSV.")
-    overview, history, promos, status = st.tabs(["Обзор", "История", "Промоакции", "Состояние данных"])
+    overview, history, comparison, promos, status = st.tabs(["Обзор", "История", "Сравнение", "Промоакции", "Состояние данных"])
     try:
         data = load_history()
         error = "В истории пока нет наблюдений." if data.empty else None
@@ -172,7 +255,7 @@ def main():
     except (OSError, UnicodeError, csv.Error, ValueError) as exc:
         data, error = pd.DataFrame(), f"Не удалось прочитать историю. {exc}"
     if error:
-        for tab in [overview, history, promos]:
+        for tab in [overview, history, comparison, promos]:
             with tab:
                 st.info("Данные недоступны. Подробности на вкладке «Состояние данных».")
         with status:
@@ -209,6 +292,8 @@ def main():
                 st.info("Одно наблюдение за период. Для линии изменения цены нужно хотя бы два.")
             show_daily_chart(selected)
             show_table(selected, ["date", "checked_at", "price", "regular_price", "discount_pct", "is_promo", "url"])
+    with comparison:
+        show_comparison(data, today)
     with promos:
         st.subheader("Действующие акции по последним наблюдениям")
         if active.empty:
