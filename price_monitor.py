@@ -1,4 +1,4 @@
-"""Collect public Fora and ATB prices and build a daily XLSX report.
+"""Collect public supplier prices and build a daily XLSX report.
 
 Prices are accepted only from an unambiguous main-product price block when the
 page title matches the expected product. No fabricated values on failures.
@@ -9,6 +9,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -232,10 +233,42 @@ def parse_atb_prices(html, product):
     return dict(price=str(price), **promo_fields(price, regular))
 
 
-def collect_atb(product):
-    request = Request(product["url"], headers={"User-Agent": "supplier-price-monitor/1.0"})
+def collect_varus(product):
+    slug = urlsplit(product["url"]).path.strip("/")
+    url = f"https://varus.ua/kyiv/{slug}"
+    html = fetch_html(url)
+    marker = "window.__INITIAL_STATE__="
+    if marker not in html:
+        raise ValueError("Missing VARUS product state")
+    state, _ = json.JSONDecoder(parse_float=Decimal).raw_decode(html.split(marker, 1)[1].lstrip())
+    item = state["product"]["current"]
+    if (state["route"]["path"].rstrip("/") != f"/kyiv/{slug}"
+            or str(item["sku"]) != product["sku"] or item["name"] != product["product"]
+            or item["unit"] != "kg" or item["stock"]["is_in_stock"] is not True):
+        raise ValueError("VARUS city, product, unit or availability mismatch")
+    soup = BeautifulSoup(html, "html.parser")
+    schemas = [json.loads(tag.get_text(), parse_float=Decimal)
+               for tag in soup.select('script[type="application/ld+json"]')]
+    schema, = [s for s in schemas if isinstance(s, dict) and s.get("@type") == "Product"]
+    offer = schema["offers"]
+    price = Decimal(item["final_price"])
+    if (str(schema["sku"]) != product["sku"] or offer["priceCurrency"] != product["currency"]
+            or Decimal(offer["price"]) != price or not offer["availability"].endswith("/InStock")):
+        raise ValueError("VARUS offer mismatch")
+    regular = Decimal(item["regular_price"])
+    if regular < price:
+        raise ValueError("VARUS regular price below selling price")
+    return dict(price=format(price, ".2f"), **promo_fields(price, regular if regular > price else None))
+
+
+def fetch_html(url):
+    request = Request(url, headers={"User-Agent": "supplier-price-monitor/1.0"})
     with urlopen(request, timeout=45) as response:
-        return parse_atb_prices(response.read().decode("utf-8"), product)
+        return response.read().decode("utf-8")
+
+
+def collect_atb(product):
+    return parse_atb_prices(fetch_html(product["url"]), product)
 
 
 def main():
@@ -255,6 +288,8 @@ def main():
             try:
                 if product["supplier"] == "АТБ":
                     prices = collect_atb(product)
+                elif product["supplier"] == "Варус":
+                    prices = collect_varus(product)
                 elif product["supplier"] == "Фора":
                     prices = collect_fora(page, product)
                 else:

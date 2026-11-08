@@ -231,10 +231,14 @@ def show_comparison(data, today):
     gaps = rows.groupby("supplier")["date"].diff().dt.days.ne(1)
     rows = rows.assign(segment=gaps.cumsum(), День=rows["date"].dt.strftime("%d.%m.%Y"),
                        date=rows["date"].dt.tz_localize("UTC"))
+    colors = {"Фора": "#c93438", "АТБ": "#2869b5", "Варус": "#de7418"}
+    suppliers = sorted(rows["supplier"].unique())
+    scale = (alt.Scale(domain=suppliers, range=[colors[s] for s in suppliers])
+             if all(s in colors for s in suppliers) else alt.Scale(scheme="tableau10"))
     chart = alt.Chart(rows).mark_line(point=True).encode(
         x=daily_axis(rows["date"]), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
                                           scale=alt.Scale(zero=False)),
-        color=alt.Color("supplier:N", title="Поставщик"), detail="segment:N",
+        color=alt.Color("supplier:N", title="Поставщик", scale=scale), detail="segment:N",
         tooltip=["День:N", alt.Tooltip("supplier:N", title="Поставщик"),
                  alt.Tooltip("price:Q", title="Цена, грн", format=".2f")])
     st.altair_chart(chart.properties(height=320), width="stretch")
