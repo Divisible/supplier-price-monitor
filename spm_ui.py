@@ -1,4 +1,4 @@
-"""Shared presentation settings for the SPM dashboard."""
+"""Shared charts, tables and layout for the SPM dashboard."""
 import altair as alt
 import pandas as pd
 import streamlit as st
