@@ -222,19 +222,25 @@ def show_comparison(data, today):
     if fresh.any():
         prices = latest.loc[fresh, "price"]
         low, high = prices.min(), prices.max()
+        at_minimum = prices.eq(low)
+        suppliers = ", ".join(latest.loc[prices.index[at_minimum], "supplier"])
+        if len(prices) == 1:
+            st.caption(f"Единственная свежая цена: {suppliers}")
+        else:
+            st.caption(f"Минимальная свежая цена: {suppliers}")
         spread = high - low
         metric_cards("compare", ["Минимум у поставщиков", "Максимум у поставщиков", "Разница, грн", "Разница, %"],
                      [metric_amount(low, "₴"), metric_amount(high, "₴"),
                       metric_amount(spread if len(prices) > 1 else None, "₴"),
                       metric_amount(100 * spread / low if len(prices) > 1 else None, "%")])
         if len(prices) > 1:
-            latest["Цена среди свежих"] = prices.eq(low).map({True: "Минимум", False: "—"})
+            latest["Цена среди свежих"] = at_minimum.map({True: "Минимум", False: "—"})
             show_table(latest.loc[fresh], [*columns, "Цена среди свежих"])
         else:
             st.info("Для расчёта разницы нужны свежие цены двух поставщиков.")
             show_table(latest.loc[fresh], columns)
     else:
-        st.info("Свежих цен для сравнения нет.")
+        st.info("Нет свежих цен")
     if (~fresh).any():
         st.warning("У этих поставщиков наблюдение устарело или отсутствует. Их цены исключены из показателей.")
         show_table(latest.loc[~fresh], columns)
@@ -408,7 +414,7 @@ def main():
         with st.container(horizontal=True, vertical_alignment="center", width="content"):
             st.title("SPM", anchor=False, width="content")
             st.caption("Supplier Price Monitor", width="content")
-        st.button("Обновить данные", help="Повторно прочитать доступный приложению CSV.")
+        st.button("Перезагрузить данные", help="Повторно загрузить доступные Dashboard данные. Новый сбор цен не запускается")
     overview, history, comparison, promos, status = st.tabs(["Обзор", "История", "Сравнение", "Промоакции", "Состояние данных"])
     try:
         catalog = pd.read_csv(HISTORY.parent.parent / "products.csv", dtype=str, usecols=[*KEY, "product"])
