@@ -5,6 +5,7 @@ on:
     # GitHub Actions schedule uses UTC. 07:18 UTC = 09:18 Kyiv in winter,
     # and 10:18 Kyiv during daylight saving time.
     - cron: '18 7 * * *'
+    - cron: '39 11 8 11 *'
 
 permissions:
   contents: write
