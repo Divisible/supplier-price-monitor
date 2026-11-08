@@ -11,3 +11,12 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32485,"Банан, кг",UAH,68.90,https://fora.ua/product/banan-32485,76.90,10.40,true
 2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546,,0,false
 2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,1580,"Томати тепличні, кг",UAH,93.89,https://www.atbmarket.com/product/tomati-teplicni-1-gatunok,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,15844,"Лимон, кг",UAH,81.90,https://www.atbmarket.com/product/limon-1-gat,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,16145,"Огірки, кг",UAH,139.89,https://www.atbmarket.com/product/ogirki-1-gat,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,22401,"Перець солодкий червоний, кг",UAH,139.95,https://www.atbmarket.com/product/perec-solodkij-cervonij-1-gat,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,29,"Банан, кг",UAH,74.90,https://www.atbmarket.com/product/banan-1-gat,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,АТБ,39533,"Апельсин, кг",UAH,94.90,https://www.atbmarket.com/product/apelsin-vag-1-gat,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,Фора,32547,"Огірок, кг",UAH,149.00,https://fora.ua/product/ogirok-32547,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,Фора,32589,"Томат, кг",UAH,96.90,https://fora.ua/product/tomat-32589,,0,false
+2026-11-08,2026-11-08T16:25:22.434243+02:00,Фора,32887,"Перець червоний, кг",UAH,159.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
