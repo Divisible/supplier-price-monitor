@@ -8,3 +8,6 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-07,2026-11-07T10:56:51.063987+02:00,Фора,32485,"Банан, кг",UAH,68.90,https://fora.ua/product/banan-32485,76.90,10.40,true
 2026-11-07,2026-11-07T10:56:51.063987+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546,,0,false
 2026-11-07,2026-11-07T10:56:51.063987+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
+2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32485,"Банан, кг",UAH,68.90,https://fora.ua/product/banan-32485,76.90,10.40,true
+2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32546,"Апельсин, кг",UAH,89.90,https://fora.ua/product/apelsyn-32546,,0,false
+2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
