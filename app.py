@@ -183,6 +183,15 @@ def load_mapping():
     return mapping
 
 
+def freshness(day, today):
+    if pd.isna(day):
+        return "Нет данных"
+    age = (today - day).days
+    if age < 0:
+        return "Дата в будущем"
+    return "Свежая" if age <= 1 else "Устарела"
+
+
 def show_comparison(data, today):
     try:
         mapping = load_mapping()
@@ -201,7 +210,7 @@ def show_comparison(data, today):
     rows = rows[rows["date"].dt.date <= today]
     latest = group.merge(rows.groupby("supplier").tail(1)[[*KEY, "date", "price"]], on=KEY, how="left")
     latest["Соответствие"] = latest["match_type"].map(MATCH_LABELS)
-    fresh = latest["date"].ge(pd.Timestamp(today - timedelta(days=1)))
+    fresh = latest["date"].dt.date.map(lambda day: freshness(day, today)).eq("Свежая")
     columns = ["supplier", "sku", "price", "date", "Соответствие"]
     st.subheader("Актуальные цены")
     st.caption("Учитываются наблюдения за сегодня и вчера по Киеву. Разница в процентах рассчитана от минимальной цены.")
@@ -268,7 +277,7 @@ def promo_periods(data, today):
                 if pd.notna(row.discount_pct):
                     previous = period["max_discount"]
                     period["max_discount"] = row.discount_pct if previous is None else max(previous, row.discount_pct)
-                period["status"] = "Активна" if (today - day).days <= 1 else "Неизвестно"
+                period["status"] = "Активна" if freshness(day, today) == "Свежая" else "Неизвестно"
             elif period is not None:
                 period["ended"] = day
                 period["status"] = "Завершена"
@@ -324,6 +333,52 @@ def show_promo_history(data, current, today):
                  column_config=config, hide_index=True, width="stretch")
 
 
+def show_diagnostics(current, today):
+    root = HISTORY.parent.parent
+    try:
+        positions = pd.read_csv(root / "products.csv", dtype=str, usecols=[*KEY, "product"])
+        path = HISTORY.with_name("collection_status.csv")
+        fields = [*KEY, "status", "checked_at", "reason"]
+        attempts = pd.DataFrame(columns=fields)
+        if path.exists():
+            attempts = pd.read_csv(path, dtype=str, usecols=fields, keep_default_na=False)
+            attempts["checked_at"] = pd.to_datetime(attempts["checked_at"], format="ISO8601", utc=True).dt.tz_convert(KYIV).dt.strftime("%d.%m.%Y %H:%M:%S")
+        else:
+            st.info("Файл диагностики ещё не создан. Статусы появятся после сбора.")
+        positions = positions.merge(attempts, on=KEY, how="left", validate="one_to_one")
+        successes = current.reindex(columns=[*KEY, "price", "date"])
+        positions = positions.merge(successes, on=KEY, how="left", validate="one_to_one")
+    except (OSError, ValueError) as exc:
+        st.warning(f"Не удалось загрузить диагностику: {exc}")
+        return
+    positions["date"] = pd.to_datetime(positions["date"])
+    positions["Свежесть"] = positions["date"].dt.date.map(lambda day: freshness(day, today))
+    positions["status"] = positions["status"].fillna("Нет попытки")
+    counts = positions["status"].value_counts()
+    stale = positions["Свежесть"].eq("Устарела").sum()
+    for column, label, value in zip(st.columns(6), ["Отслеживается", "Успешно", "Ошибок",
+            "Без цены", "Нет в наличии", "Устаревших цен"], [len(positions), counts.get("ok", 0),
+            counts.get("error", 0), counts.get("price_missing", 0), counts.get("out_of_stock", 0), stale]):
+        column.metric(label, value)
+    if stale:
+        st.warning(f"Устаревшие цены: {stale}. Последняя успешная проверка была раньше вчерашнего дня.")
+    left, right = st.columns(2)
+    supplier = left.selectbox("Поставщик", ["Все", *sorted(positions["supplier"].unique())], key="diag_supplier")
+    status = right.selectbox("Статус последней попытки", ["Все", "ok", "error", "price_missing",
+                             "out_of_stock", "Нет попытки"], key="diag_status")
+    if supplier != "Все":
+        positions = positions[positions["supplier"].eq(supplier)]
+    if status != "Все":
+        positions = positions[positions["status"].eq(status)]
+    positions["date"] = positions["date"].dt.date
+    config = dict(supplier="Поставщик", product="Товар", sku="SKU", status="Статус",
+                  checked_at="Последняя попытка по Киеву", price=st.column_config.NumberColumn(
+                      "Последняя успешная цена", format="%.2f ₴"),
+                  date=st.column_config.DateColumn("Последнее успешное наблюдение", format="DD.MM.YYYY"),
+                  Свежесть="Свежесть", reason="Причина")
+    st.dataframe(positions, column_order=list(config), column_config=config, hide_index=True, width="stretch")
+
+
 def main():
     st.set_page_config(page_title="SPM", page_icon="📊", layout="wide")
     st.title("SPM")
@@ -343,13 +398,15 @@ def main():
                 st.info("Данные недоступны. Подробности на вкладке «Состояние данных».")
         with status:
             st.warning(error)
+            show_diagnostics(pd.DataFrame(), datetime.now(KYIV).date())
             st.caption("Источник — локальный CSV приложения. Состояние GitHub Actions здесь не проверяется.")
         return
 
     current = latest_prices(data)
     last = data["checked_at"].max()
     today = datetime.now(KYIV).date()
-    active = current.loc[current["is_promo"].eq(True).fillna(False)]
+    fresh = current["date"].dt.date.map(lambda day: freshness(day, today)).eq("Свежая")
+    active = current.loc[current["is_promo"].eq(True).fillna(False) & fresh]
     with overview:
         for column, label, value in zip(st.columns(4),
                 ["Товаров", "Поставщиков", "Активных акций", "Последнее наблюдение"],
@@ -357,7 +414,9 @@ def main():
             column.metric(label, value)
         st.subheader("Актуальные цены")
         st.caption("Последнее наблюдение каждого товара. Изменение — относительно предыдущего доступного наблюдения.")
-        show_current_prices(current)
+        if (~fresh).any():
+            st.warning("Устаревшие или будущие наблюдения исключены из актуальных цен. Подробности — в «Состоянии данных».")
+        show_current_prices(current.loc[fresh])
         if current["previous_price"].isna().any():
             st.info("Для части товаров пока есть только одно наблюдение. Изменение цены появится после следующего.")
     with history:
@@ -379,17 +438,16 @@ def main():
         show_comparison(data, today)
     with promos:
         st.subheader("Действующие акции по последним наблюдениям")
-        fresh = current["date"].dt.date.between(today - timedelta(days=1), today)
-        fresh_active = active.loc[fresh.reindex(active.index)]
-        if fresh_active.empty:
+        if active.empty:
             st.info("Среди последних наблюдений подтверждённых акций нет.")
         else:
-            show_table(fresh_active, ["supplier", "product", "sku", "date", "price", "regular_price", "discount_pct"])
+            show_table(active, ["supplier", "product", "sku", "date", "price", "regular_price", "discount_pct"])
         unknown = (current["is_promo"].isna() | ~fresh).sum()
         if unknown:
             st.caption(f"Статус акции неизвестен у {unknown} товаров.")
         show_promo_history(data, current, today)
     with status:
+        show_diagnostics(current, today)
         left, right = st.columns(2)
         left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M"))
         right.metric("Записей истории", len(data))

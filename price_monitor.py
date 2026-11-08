@@ -5,10 +5,14 @@ page title matches the expected product. No fabricated values on failures.
 """
 import csv
 import json
+import os
 import re
+from contextlib import ExitStack
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -23,6 +27,17 @@ HISTORY = ROOT / "data" / "price_history.csv"
 OUTPUT = ROOT / "output" / "Supplier_Prices.xlsx"
 LEGACY_FIELDS = ["date", "checked_at", "supplier", "sku", "product", "currency", "price", "url"]
 FIELDS = LEGACY_FIELDS + ["regular_price", "discount_pct", "is_promo"]
+STATUS_FIELDS = ["supplier", "sku", "checked_at", "status", "reason"]
+
+
+class PriceMissing(ValueError):
+    """A verified product card does not provide a usable price."""
+
+
+class OutOfStock(ValueError):
+    """The identified product has an explicit unavailable flag."""
+
+
 PRICE_PATTERN = re.compile(r"^\s*(\d{1,6})(?:[,.](\d{1,2}))?\s*грн\s*$", re.I)
 
 
@@ -43,11 +58,11 @@ def parse_price(raw):
 
 def promo_fields(price, regular=None):
     if not price.is_finite() or price <= 0:
-        raise ValueError("Invalid selling price")
+        raise PriceMissing("Invalid selling price")
     if regular is None:
         return dict(regular_price="", discount_pct="0", is_promo="false")
     if not regular.is_finite() or regular <= price:
-        raise ValueError("Regular price must exceed selling price")
+        raise PriceMissing("Regular price must exceed selling price")
     discount = ((regular - price) / regular * 100).quantize(Decimal("0.01"))
     return dict(regular_price=str(regular), discount_pct=str(discount), is_promo="true")
 
@@ -59,9 +74,11 @@ def parse_product_prices(details, sku):
     if len(re.findall(r"(?<!\d)" + re.escape(sku) + r"(?!\d)", normalized)) != 1:
         raise ValueError("Missing or ambiguous product SKU")
     tail = normalized.split(sku, 1)[1]
+    if re.search(r"(?im)^\s*(немає в наявності|відсутній у продажу)\s*$", tail):
+        raise OutOfStock()
     block, separator, _ = tail.partition("В кошик")
     if not separator:
-        raise ValueError("Missing purchase button after price")
+        raise PriceMissing()
     pattern = (
         r"\s*(?:кг|шт|л|г)\s*\n"
         r"(?:\s*(?P<regular>\d{1,5}[,.]\d{2})[ \t]*грн\s*\n"
@@ -71,7 +88,7 @@ def parse_product_prices(details, sku):
     )
     match = re.fullmatch(pattern, block, re.I)
     if not match:
-        raise ValueError(f"Ambiguous main product price block: {block[:180]!r}")
+        raise PriceMissing()
     price = Decimal(match["major"] + "." + match["minor"])
     regular = Decimal(match["regular"].replace(",", ".")) if match["regular"] else None
     return dict(price=str(price), **promo_fields(price, regular))
@@ -112,14 +129,20 @@ def history_key(row):
     return row["date"], row["supplier"], row["sku"]
 
 
-def save_history(rows):
-    HISTORY.parent.mkdir(parents=True, exist_ok=True)
-    temporary = HISTORY.with_suffix(".csv.tmp")
-    with temporary.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
-    temporary.replace(HISTORY)
+def save_csv(path, fields, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stream = NamedTemporaryFile(dir=path.parent, mode="w", encoding="utf-8", newline="", delete=False)
+    temporary = Path(stream.name)
+    try:
+        with stream:
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 
@@ -186,14 +209,17 @@ def collect_fora(page, product):
         let node = heading;
         for (let depth = 0; depth < 7 && node; depth++, node = node.parentElement) {
             const text = node.innerText || "";
-            if (text.includes(sku) && text.length < 2500 && /грн/.test(text)) {
+            if (text.includes(sku) && text.length < 2500 && /грн|немає в наявності|відсутній у продажу/i.test(text)) {
                 return text;
             }
         }
         return null;
     }""", sku)
     if not details:
-        raise ValueError("Cannot isolate product details containing title, SKU and price")
+        # Missing SKU can also indicate a broken or unrelated product page.
+        if not page.get_by_text(sku, exact=True).count():
+            raise ValueError("Cannot verify Fora SKU")
+        raise PriceMissing()
     return parse_product_prices(details, sku)
 
 
@@ -211,8 +237,19 @@ def parse_atb_prices(html, product):
     if title.casefold() != product["product"].split(",")[0].casefold():
         raise ValueError(f"ATB product mismatch: {title}")
     code = single_element(card, ".custom-tag__text strong[data-available]")
-    if code.get_text(strip=True) != product["sku"] or code["data-available"] != "1":
-        raise ValueError("ATB SKU mismatch or product unavailable")
+    if code.get_text(strip=True) != product["sku"]:
+        raise ValueError("ATB SKU mismatch")
+    if code["data-available"] == "0":
+        raise OutOfStock()
+    if code["data-available"] != "1":
+        raise ValueError("Unknown ATB availability")
+    try:
+        return atb_weight_price(card)
+    except ValueError as exc:
+        raise PriceMissing() from exc
+
+
+def atb_weight_price(card):
     block = single_element(card, ".product-about__buy-row .product-price--weight")
     current = single_element(block, "data.product-price__top")
     unit = single_element(current, "abbr").get_text(strip=True)
@@ -244,20 +281,27 @@ def collect_varus(product):
     item = state["product"]["current"]
     if (state["route"]["path"].rstrip("/") != f"/kyiv/{slug}"
             or str(item["sku"]) != product["sku"] or item["name"] != product["product"]
-            or item["unit"] != "kg" or item["stock"]["is_in_stock"] is not True):
+            or item["unit"] != "kg"):
         raise ValueError("VARUS city, product, unit or availability mismatch")
+    if item["stock"]["is_in_stock"] is False:
+        raise OutOfStock()
+    if item["stock"]["is_in_stock"] is not True:
+        raise ValueError("Unknown VARUS availability")
     soup = BeautifulSoup(html, "html.parser")
     schemas = [json.loads(tag.get_text(), parse_float=Decimal)
                for tag in soup.select('script[type="application/ld+json"]')]
     schema, = [s for s in schemas if isinstance(s, dict) and s.get("@type") == "Product"]
     offer = schema["offers"]
-    price = Decimal(item["final_price"])
-    if (str(schema["sku"]) != product["sku"] or offer["priceCurrency"] != product["currency"]
-            or Decimal(offer["price"]) != price or not offer["availability"].endswith("/InStock")):
+    if str(schema["sku"]) != product["sku"] or not offer["availability"].endswith("/InStock"):
         raise ValueError("VARUS offer mismatch")
-    regular = Decimal(item["regular_price"])
-    if regular < price:
-        raise ValueError("VARUS regular price below selling price")
+    try:
+        price = Decimal(item["final_price"])
+        regular = Decimal(item["regular_price"])
+        if (offer.get("priceCurrency") != product["currency"] or Decimal(offer["price"]) != price
+                or not regular.is_finite() or regular < price):
+            raise PriceMissing()
+    except (KeyError, TypeError, InvalidOperation) as exc:
+        raise PriceMissing() from exc
     return dict(price=format(price, ".2f"), **promo_fields(price, regular if regular > price else None))
 
 
@@ -275,48 +319,69 @@ def main():
     with (ROOT / "products.csv").open(encoding="utf-8-sig", newline="") as stream:
         products = list(csv.DictReader(stream))
     history = load_history()
-    keys = {history_key(row) for row in history}
-    additions = []
+    by_day = {history_key(row): row for row in history}
+    attempts = []
     errors = []
-    now = datetime.now(ZoneInfo("Europe/Kyiv"))
-    today = now.date().isoformat()
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page(locale="uk-UA", timezone_id="Europe/Kyiv")
+    changed = False
+    with ExitStack() as stack:
+        page = None
         for product in products:
+            supplier = product["supplier"]
             sku = product["sku"]
+            prices = None
+            status, reason = "ok", ""
             try:
-                if product["supplier"] == "АТБ":
+                if supplier == "АТБ":
                     prices = collect_atb(product)
-                elif product["supplier"] == "Варус":
+                elif supplier == "Варус":
                     prices = collect_varus(product)
-                elif product["supplier"] == "Фора":
+                elif supplier == "Фора":
+                    if page is None or page.is_closed() is True:
+                        playwright = stack.enter_context(sync_playwright())
+                        browser = playwright.chromium.launch(headless=True)
+                        page = browser.new_page(locale="uk-UA", timezone_id="Europe/Kyiv")
                     prices = collect_fora(page, product)
                 else:
-                    raise ValueError(f"Unsupported supplier: {product['supplier']}")
-                record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
+                    raise ValueError("Unsupported supplier")
+            except OutOfStock:
+                status, reason = "out_of_stock", "Источник подтвердил отсутствие товара."
+            except PriceMissing:
+                status, reason = "price_missing", "Цена в карточке отсутствует или не прошла проверку."
+            except HTTPError as exc:
+                status, reason = "error", f"HTTP {exc.code}"
+            except (URLError, TimeoutError):
+                status, reason = "error", "Ошибка соединения или истекло время ожидания."
+            except Exception as exc:
+                # Exception messages from browsers may contain raw HTML or signed URLs.
+                status, reason = "error", f"Ошибка запроса или разбора ({type(exc).__name__})."
+
+            now = datetime.now(ZoneInfo("Europe/Kyiv"))
+            checked_at = now.isoformat()
+            attempts.append(dict(supplier=supplier, sku=sku, checked_at=checked_at, status=status, reason=reason))
+            if status == "ok":
+                record = dict(date=now.date().isoformat(), checked_at=checked_at, supplier=supplier,
                               sku=sku, product=product["product"], currency=product["currency"],
                               url=product["url"], **prices)
                 key = history_key(record)
-                if key not in keys:
-                    additions.append(record)
-                    keys.add(key)
-                print(f"{sku}: {record['price']} UAH; regular={record['regular_price']}; "
-                      f"discount={record['discount_pct']}%; promo={record['is_promo']}")
-            except Exception as exc:
-                errors.append(dict(supplier=product["supplier"], sku=sku, product=product["product"],
-                                   url=product["url"], error=str(exc)))
-                print(f"{sku}: ERROR {exc}")
-        browser.close()
-    if not errors:
-        history.extend(additions)
-        history.sort(key=history_key)
-        # Also migrate a legacy file when all observations already exist today.
-        save_history(history)
+                previous = by_day.get(key)
+                if previous is None or (now > datetime.fromisoformat(previous["checked_at"])
+                                        and any(previous[k] != v for k, v in prices.items())):
+                    by_day[key] = record
+                    changed = True
+            else:
+                errors.append(dict(supplier=supplier, sku=sku, product=product["product"],
+                                   url=product["url"], error=reason))
+            print(f"{supplier} {sku}: {status} {reason}")
+
+    if changed:
+        history = sorted(by_day.values(), key=history_key)
+        save_csv(HISTORY, FIELDS, history)
+    save_csv(HISTORY.with_name("collection_status.csv"), STATUS_FIELDS, attempts)
     make_report(history, errors)
-    print(f"Report: {OUTPUT}; errors: {len(errors)}")
-    if errors:
-        raise SystemExit(1)
+    print(f"Successful: {len(products) - len(errors)}/{len(products)}")
+    if len(errors) == len(products):
+        print("No product yielded a verified price.")
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

@@ -55,6 +55,7 @@ class PromotionTests(unittest.TestCase):
         playwright.return_value.__enter__.return_value.chromium.launch.return_value = browser
         clock = MagicMock()
         clock.now.return_value = datetime.fromisoformat(day + "T12:00:00+02:00")
+        clock.fromisoformat.side_effect = datetime.fromisoformat
         with patch.object(monitor, "sync_playwright", playwright), patch.object(monitor, "datetime", clock):
             monitor.main()
 
@@ -104,15 +105,17 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(history[0][8:], (None, None, None))
         self.assertEqual(history[3][8:], (76.9, 10.4, True))
 
-    def test_failure_does_not_publish_partial_history(self):
-        before = monitor.HISTORY.read_bytes()
-        with self.assertRaises(SystemExit) as raised:
-            self.collect(fail=True)
-        self.assertEqual(raised.exception.code, 1)
-        self.assertEqual(monitor.HISTORY.read_bytes(), before)
+    def test_failure_preserves_successful_observations(self):
+        self.collect(fail=True)
+        rows = monitor.load_history()
+        self.assertEqual(rows[:3], self.old)
+        self.assertEqual({r["sku"] for r in rows[3:]}, {"32485", "32546"})
+        with monitor.HISTORY.with_name("collection_status.csv").open(encoding="utf-8") as f:
+            statuses = {r["sku"]: r["status"] for r in csv.DictReader(f)}
+        self.assertEqual(statuses, {"32485": "ok", "32546": "ok", "32550": "price_missing"})
         wb = load_workbook(monitor.OUTPUT)
         self.addCleanup(wb.close)
-        self.assertEqual(wb["History"].max_row, 4)
+        self.assertEqual(wb["History"].max_row, 6)
         self.assertEqual(wb["Errors"].max_row, 2)
 
 class AtbTests(unittest.TestCase):
