@@ -1,0 +1,13 @@
+product_id,canonical_name,supplier,sku,unit,match_type
+FRU001,"Лимон, кг",Фора,32550,кг,equivalent
+FRU002,"Апельсин, кг",Фора,32546,кг,equivalent
+FRU003,"Банан, кг",Фора,32485,кг,equivalent
+FRU004,"Огурец, кг",Фора,32547,кг,equivalent
+FRU005,"Перець красный, кг",Фора,32887,кг,equivalent
+FRU006,"Томат, кг",Фора,32589,кг,equivalent
+FRU001,"Лимон, кг",АТБ,15844,кг,equivalent
+FRU002,"Апельсин, кг",АТБ,39533,кг,equivalent
+FRU003,"Банан, кг",АТБ,29,кг,equivalent
+FRU004,"Огурец, кг",АТБ,16145,кг,equivalent
+FRU005,"Перець красный, кг",АТБ,22401,кг,equivalent
+FRU006,"Томат, кг",АТБ,1580,кг,equivalent
