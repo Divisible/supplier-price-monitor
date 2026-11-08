@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -119,9 +120,47 @@ def show_table(data, columns):
     st.dataframe(display, column_config=config, hide_index=True, width="stretch")
 
 
+def show_current_prices(current):
+    columns = ["supplier", "product", "sku", "price", "change", "change_pct",
+               "regular_price", "discount_pct", "is_promo"]
+    page_size = 20
+    page_count = (len(current) + page_size - 1) // page_size
+    if page_count > 1:
+        sort, direction, pager = st.columns([2, 2, 1])
+        field = sort.selectbox("Сортировать по", columns, format_func=LABELS.get)
+        order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
+        current = current.sort_values(field, ascending=order == "По возрастанию", kind="stable")
+        page = pager.selectbox("Страница", range(1, page_count + 1))
+        start = (page - 1) * page_size
+        current = current.iloc[start:start + page_size]
+    show_table(current, columns)
+
+
+def show_daily_chart(selected):
+    prices = selected[["date", "price", "regular_price"]].rename(columns={
+        "price": "Цена продажи", "regular_price": "Обычная цена"})
+    if prices["Обычная цена"].isna().all():
+        prices = prices.drop(columns="Обычная цена")
+    prices = prices.melt(id_vars="date", var_name="Тип цены", value_name="Цена")
+    # Encode Kyiv calendar dates at UTC midnight so the browser cannot shift the day.
+    prices["День"] = prices["date"].dt.strftime("%d.%m.%Y")
+    prices["date"] = prices["date"].dt.tz_localize("UTC")
+    dates = prices["date"].drop_duplicates().sort_values()
+    step = max(1, (len(dates) + 7) // 8)
+    ticks = [int(day.timestamp()) * 1000 for day in dates.iloc[::step]]
+    chart = alt.Chart(prices).mark_line(point=True).encode(
+        x=alt.X("date:T", title="Дата", scale=alt.Scale(type="utc"),
+                axis=alt.Axis(format="%d.%m.%Y", values=ticks)),
+        y=alt.Y("Цена:Q", title="грн", scale=alt.Scale(zero=False)),
+        color="Тип цены:N",
+        tooltip=["День:N", "Тип цены:N", alt.Tooltip("Цена:Q", format=".2f")],
+    )
+    st.altair_chart(chart.properties(height=320), width="stretch")
+
+
 def main():
-    st.set_page_config(page_title="Мониторинг цен", page_icon="📊", layout="wide")
-    st.title("Мониторинг цен")
+    st.set_page_config(page_title="SPM", page_icon="📊", layout="wide")
+    st.title("SPM")
     st.caption("Цены поставщиков · история наблюдений · промоакции")
     st.button("Обновить данные", help="Повторно прочитать доступный приложению CSV.")
     overview, history, promos, status = st.tabs(["Обзор", "История", "Промоакции", "Состояние данных"])
@@ -152,8 +191,7 @@ def main():
             column.metric(label, value)
         st.subheader("Актуальные цены")
         st.caption("Последнее наблюдение каждого товара. Изменение — относительно предыдущего доступного наблюдения.")
-        show_table(current, ["supplier", "product", "sku", "date", "price", "change",
-                             "change_pct", "regular_price", "discount_pct", "is_promo"])
+        show_current_prices(current)
         if current["previous_price"].isna().any():
             st.info("Для части товаров пока есть только одно наблюдение. Изменение цены появится после следующего.")
     with history:
@@ -169,11 +207,7 @@ def main():
         else:
             if len(selected) < 2:
                 st.info("Одно наблюдение за период. Для линии изменения цены нужно хотя бы два.")
-            chart = selected.set_index("date")[["price"]].rename(columns={"price": "Цена продажи"})
-            if selected["regular_price"].notna().any():
-                chart["Обычная цена"] = selected.set_index("date")["regular_price"]
-            # Dates are Kyiv calendar dates, deliberately displayed without UTC conversion.
-            st.line_chart(chart, y_label="грн", height=320, width="stretch")
+            show_daily_chart(selected)
             show_table(selected, ["date", "checked_at", "price", "regular_price", "discount_pct", "is_promo", "url"])
     with promos:
         st.subheader("Действующие акции по последним наблюдениям")
