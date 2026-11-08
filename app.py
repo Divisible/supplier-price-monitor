@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import altair as alt
 import pandas as pd
 import streamlit as st
+from ui_style import metric_amount, price_tooltip, style_chart, supplier_scales
 
 HISTORY = Path(__file__).resolve().parent / "data" / "price_history.csv"
 KYIV = ZoneInfo("Europe/Kyiv")
@@ -139,7 +140,8 @@ def show_current_prices(current):
 def daily_axis(dates):
     dates = dates.drop_duplicates().sort_values()
     step = max(1, (len(dates) + 7) // 8)
-    ticks = [int(day.timestamp()) * 1000 for day in dates.iloc[::step]]
+    ticks = [alt.DateTime(year=day.year, month=day.month, date=day.day, utc=True)
+             for day in dates.iloc[::step]]
     return alt.X("date:T", title="Дата", scale=alt.Scale(type="utc"),
                  axis=alt.Axis(format="%d.%m.%Y", values=ticks))
 
@@ -156,10 +158,11 @@ def show_daily_chart(selected):
     chart = alt.Chart(prices).mark_line(point=True).encode(
         x=daily_axis(prices["date"]),
         y=alt.Y("Цена:Q", title="грн", scale=alt.Scale(zero=False)),
-        color="Тип цены:N",
-        tooltip=["День:N", "Тип цены:N", alt.Tooltip("Цена:Q", format=".2f")],
+        color=alt.Color("Тип цены:N", scale=alt.Scale(
+            domain=list(prices["Тип цены"].unique()), range=["#2563EB", "#64748B"])),
+        tooltip=["День:N", "Тип цены:N", price_tooltip("Цена:Q")],
     )
-    st.altair_chart(chart.properties(height=320), width="stretch")
+    st.altair_chart(style_chart(chart), theme=None, width="stretch")
 
 
 MATCH_LABELS = {"exact": "Точное", "equivalent": "Сопоставимое", "unmatched": "Без соответствия"}
@@ -218,11 +221,11 @@ def show_comparison(data, today):
         prices = latest.loc[fresh, "price"]
         low, high = prices.min(), prices.max()
         metrics = st.columns(4)
-        metrics[0].metric("Минимум у поставщиков", f"{low:.2f} ₴")
-        metrics[1].metric("Максимум у поставщиков", f"{high:.2f} ₴")
+        metrics[0].metric("Минимум у поставщиков", metric_amount(low, "₴"))
+        metrics[1].metric("Максимум у поставщиков", metric_amount(high, "₴"))
         spread = high - low
-        metrics[2].metric("Разница, грн", f"{spread:.2f}" if len(prices) > 1 else "—")
-        metrics[3].metric("Разница, %", f"{100 * spread / low:.2f}" if len(prices) > 1 else "—")
+        metrics[2].metric("Разница, грн", metric_amount(spread if len(prices) > 1 else None, "₴"))
+        metrics[3].metric("Разница, %", metric_amount(100 * spread / low if len(prices) > 1 else None, "%"))
         show_table(latest.loc[fresh], columns)
     if (~fresh).any():
         st.warning("У этих поставщиков наблюдение устарело или отсутствует. Их цены исключены из показателей.")
@@ -240,17 +243,19 @@ def show_comparison(data, today):
     gaps = rows.groupby("supplier")["date"].diff().dt.days.ne(1)
     rows = rows.assign(segment=gaps.cumsum(), День=rows["date"].dt.strftime("%d.%m.%Y"),
                        date=rows["date"].dt.tz_localize("UTC"))
-    colors = {"Фора": "#c93438", "АТБ": "#2869b5", "Варус": "#de7418"}
     suppliers = sorted(rows["supplier"].unique())
-    scale = (alt.Scale(domain=suppliers, range=[colors[s] for s in suppliers])
-             if all(s in colors for s in suppliers) else alt.Scale(scheme="tableau10"))
-    chart = alt.Chart(rows).mark_line(point=True).encode(
+    colors, dashes, shapes = supplier_scales(suppliers)
+    base = alt.Chart(rows).encode(
         x=daily_axis(rows["date"]), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
                                           scale=alt.Scale(zero=False)),
-        color=alt.Color("supplier:N", title="Поставщик", scale=scale), detail="segment:N",
+        color=alt.Color("supplier:N", title="Поставщик", scale=colors), detail="segment:N",
         tooltip=["День:N", alt.Tooltip("supplier:N", title="Поставщик"),
-                 alt.Tooltip("price:Q", title="Цена, грн", format=".2f")])
-    st.altair_chart(chart.properties(height=320), width="stretch")
+                 price_tooltip("price:Q")])
+    lines = base.mark_line(strokeWidth=2).encode(
+        strokeDash=alt.StrokeDash("supplier:N", title="Поставщик", scale=dashes))
+    points = base.mark_point(filled=True, size=65).encode(
+        shape=alt.Shape("supplier:N", title="Поставщик", scale=shapes))
+    st.altair_chart(style_chart(lines + points), theme=None, width="stretch")
     show_table(table.reset_index(), ["date", *table.columns])
 
 
@@ -381,9 +386,11 @@ def show_diagnostics(current, today):
 
 def main():
     st.set_page_config(page_title="SPM", page_icon="📊", layout="wide")
-    st.title("SPM")
-    st.caption("Цены поставщиков · история наблюдений · промоакции")
-    st.button("Обновить данные", help="Повторно прочитать доступный приложению CSV.")
+    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
+        with st.container(horizontal=True, vertical_alignment="center", width="content"):
+            st.title("SPM", anchor=False, width="content")
+            st.caption("Supplier Price Monitor", width="content")
+        st.button("Обновить данные", help="Повторно прочитать доступный приложению CSV.")
     overview, history, comparison, promos, status = st.tabs(["Обзор", "История", "Сравнение", "Промоакции", "Состояние данных"])
     try:
         data = load_history()
