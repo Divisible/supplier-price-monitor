@@ -20,3 +20,9 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-08,2026-11-08T15:54:48.215565+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
 2026-11-08,2026-11-08T16:25:22.434243+02:00,Фора,32589,"Томат, кг",UAH,96.90,https://fora.ua/product/tomat-32589,,0,false
 2026-11-08,2026-11-08T16:25:22.434243+02:00,Фора,32887,"Перець червоний, кг",UAH,159.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,127622,Банан ваговий,UAH,74.90,https://varus.ua/banan-vag,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,127797,Апельсин ваговий,UAH,86.90,https://varus.ua/apelsin-vag,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,2507408,Огірок тепличний ваговий,UAH,159.90,https://varus.ua/ogirok-teplichniy-1-gatunok-vag,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,2544821,Перець червоний ваговий,UAH,149.90,https://varus.ua/perec-chervoniy-1-gatunok-vag,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,2607223,Томат ваговий,UAH,93.90,https://varus.ua/pomidor-na-giltsivag,,0,false
+2026-11-08,2026-11-08T17:19:05.730011+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,81.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
