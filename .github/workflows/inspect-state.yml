@@ -1,0 +1,17 @@
+name: Inspect scheduler configuration
+on:
+  push:
+    branches: [diagnose/check-scheduler-state]
+permissions:
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read workflow state and Actions policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/408322269" --jq '{state,path,updated_at}'
+          gh api "repos/$GITHUB_REPOSITORY/actions/permissions" --jq '{enabled,allowed_actions}' || echo 'Repository policy unavailable to workflow token'
