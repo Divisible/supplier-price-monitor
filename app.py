@@ -245,6 +245,85 @@ def show_comparison(data, today):
     show_table(table.reset_index(), ["date", *table.columns])
 
 
+def promo_periods(data, today):
+    """Build periods from validated daily observations returned by load_history."""
+    periods = []
+    for _, rows in data.groupby(KEY, sort=False):
+        period = None
+        for row in rows.itertuples(index=False):
+            day = row.date.date()
+            if day > today:
+                continue
+            if pd.isna(row.is_promo):
+                if period is not None:
+                    period["status"] = "Неизвестно"
+            elif row.is_promo:
+                if period is None:
+                    period = dict(supplier=row.supplier, product=row.product, sku=row.sku,
+                                  first=day, ended=None, min_price=row.price, max_discount=None)
+                    periods.append(period)
+                period["last"] = day
+                period["days"] = (day - period["first"]).days + 1
+                period["min_price"] = min(period["min_price"], row.price)
+                if pd.notna(row.discount_pct):
+                    previous = period["max_discount"]
+                    period["max_discount"] = row.discount_pct if previous is None else max(previous, row.discount_pct)
+                period["status"] = "Активна" if (today - day).days <= 1 else "Неизвестно"
+            elif period is not None:
+                period["ended"] = day
+                period["status"] = "Завершена"
+                period = None
+    return pd.DataFrame(periods)
+
+
+def show_promo_history(data, current, today):
+    st.subheader("История промоакций")
+    left, middle, right = st.columns([1, 2, 1])
+    supplier = left.selectbox("Поставщик", [None, *sorted(current["supplier"].unique())],
+                              format_func=lambda value: value or "Все поставщики", key="promo_supplier")
+    if supplier is not None:
+        current = current[current["supplier"] == supplier]
+        data = data[data["supplier"] == supplier]
+    names = current.set_index(KEY)["product"].to_dict()
+    item = middle.selectbox("Товар", [None, *names], key="promo_item",
+                            format_func=lambda k: f"{names[k]} · {k[0]} · {k[1]}" if k else "Все товары")
+    if item is not None:
+        data = data[data["supplier"].eq(item[0]) & data["sku"].eq(item[1])]
+    window = right.selectbox("Период", [7, 30, 90, None], index=1, key="promo_window",
+                             format_func=lambda days: f"{days} дней" if days else "Всё время")
+    periods = promo_periods(data, today)
+    if window and not periods.empty:
+        cutoff = today - timedelta(days=window - 1)
+        through = periods["ended"].where(periods["ended"].notna(), periods["last"])
+        periods = periods.loc[through >= cutoff]
+    st.caption("Показаны периоды, пересекающие выбранный интервал по датам наблюдений. "
+               "Длительность — от первого до последнего подтверждения включительно. "
+               "Активность подтверждается наблюдением за сегодня или вчера по Киеву.")
+    metrics = st.columns(4)
+    values = ["Нет данных"] * 4
+    if not periods.empty:
+        closed = periods[periods["status"] == "Завершена"]
+        values[:2] = [int(periods["status"].eq("Активна").sum()), len(closed)]
+        if periods["max_discount"].notna().any():
+            values[2] = f"{periods['max_discount'].mean():.2f} %"
+        if not closed.empty:
+            values[3] = f"{closed['days'].mean():.1f} дн."
+    for metric, label, value in zip(metrics, ["Действующих акций", "Завершённых акций",
+            "Средняя максимальная скидка", "Средняя длительность завершённых"], values):
+        metric.metric(label, value)
+    if periods.empty:
+        st.info("Подтверждённых акционных периодов по выбранным фильтрам нет.")
+        return
+    config = {k: LABELS[k] for k in ["supplier", "product", "sku"]}
+    for field, label in [("first", "Первое обнаружение"), ("last", "Последнее подтверждение"),
+                         ("ended", "Впервые без акции")]:
+        config[field] = st.column_config.DateColumn(label, format="DD.MM.YYYY")
+    config.update(days="Дней", min_price=st.column_config.NumberColumn("Мин. цена", format="%.2f ₴"),
+                  max_discount=st.column_config.NumberColumn("Макс. скидка", format="%.2f %%"), status="Статус")
+    st.dataframe(periods.sort_values("first", ascending=False), column_order=list(config),
+                 column_config=config, hide_index=True, width="stretch")
+
+
 def main():
     st.set_page_config(page_title="SPM", page_icon="📊", layout="wide")
     st.title("SPM")
@@ -300,13 +379,16 @@ def main():
         show_comparison(data, today)
     with promos:
         st.subheader("Действующие акции по последним наблюдениям")
-        if active.empty:
+        fresh = current["date"].dt.date.between(today - timedelta(days=1), today)
+        fresh_active = active.loc[fresh.reindex(active.index)]
+        if fresh_active.empty:
             st.info("Среди последних наблюдений подтверждённых акций нет.")
         else:
-            show_table(active, ["supplier", "product", "sku", "date", "price", "regular_price", "discount_pct"])
-        unknown = current["is_promo"].isna().sum()
+            show_table(fresh_active, ["supplier", "product", "sku", "date", "price", "regular_price", "discount_pct"])
+        unknown = (current["is_promo"].isna() | ~fresh).sum()
         if unknown:
             st.caption(f"Статус акции неизвестен у {unknown} товаров.")
+        show_promo_history(data, current, today)
     with status:
         left, right = st.columns(2)
         left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M"))
