@@ -115,5 +115,32 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(wb["History"].max_row, 4)
         self.assertEqual(wb["Errors"].max_row, 2)
 
+class AtbTests(unittest.TestCase):
+    product = {"product": "Банан, кг", "sku": "29"}
+    html = """
+    <section class="product-page"><h1>Банан</h1>
+    <span class="custom-tag__text"><strong data-available="1">29</strong></span>
+    <div class="product-about__buy-row">
+      <div class="product-price--unit"><data>12.00 грн/шт</data></div>
+      <div class="product-price--weight product-price--sale">
+        <data class="product-price__top"><span>60.<span>00</span></span>
+          <abbr>грн<span>/кг</span></abbr></data>
+        <data class="product-price__bottom"><span>75.<span>00</span></span></data>
+      </div>
+    </div></section>"""
+
+    def test_weight_promo(self):
+        self.assertEqual(monitor.parse_atb_prices(self.html, self.product),
+                         dict(price="60.00", regular_price="75.00",
+                              discount_pct="20.00", is_promo="true"))
+
+    def test_reject_invalid_card(self):
+        for before, after in [('>29<', '>129<'), ('/кг', '/шт'),
+                              ('data-available="1"', 'data-available="0"'),
+                              ('product-price--sale', '')]:
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                monitor.parse_atb_prices(self.html.replace(before, after), self.product)
+
+
 if __name__ == "__main__":
     unittest.main()

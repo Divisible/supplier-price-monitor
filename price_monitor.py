@@ -1,4 +1,4 @@
-"""Collect public Fora prices and build a daily XLSX report.
+"""Collect public Fora and ATB prices and build a daily XLSX report.
 
 Prices are accepted only from an unambiguous main-product price block when the
 page title matches the expected product. No fabricated values on failures.
@@ -9,8 +9,10 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from bs4 import BeautifulSoup
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from playwright.sync_api import sync_playwright
@@ -168,6 +170,74 @@ def make_report(history, errors):
     wb.save(OUTPUT)
 
 
+def collect_fora(page, product):
+    sku = product["sku"]
+    response = page.goto(product["url"], wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(6000)
+    if not response or response.status != 200:
+        raise ValueError(f"HTTP status: {response.status if response else 'none'}")
+    title = page.title().casefold()
+    if product["product"].split(",")[0].casefold() not in title:
+        raise ValueError(f"Product title mismatch: {title[:120]}")
+    # Scope extraction to the product detail section, never site-wide
+    # recommendations or other cards.
+    details = page.locator("h1").first.evaluate("""(heading, sku) => {
+        let node = heading;
+        for (let depth = 0; depth < 7 && node; depth++, node = node.parentElement) {
+            const text = node.innerText || "";
+            if (text.includes(sku) && text.length < 2500 && /грн/.test(text)) {
+                return text;
+            }
+        }
+        return null;
+    }""", sku)
+    if not details:
+        raise ValueError("Cannot isolate product details containing title, SKU and price")
+    return parse_product_prices(details, sku)
+
+
+def single_element(parent, selector):
+    elements = parent.select(selector)
+    if len(elements) != 1:
+        raise ValueError(f"Expected one {selector}, found {len(elements)}")
+    return elements[0]
+
+
+def parse_atb_prices(html, product):
+    soup = BeautifulSoup(html, "html.parser")
+    card = single_element(soup, "section.product-page")
+    title = single_element(card, "h1").get_text(strip=True)
+    if title.casefold() != product["product"].split(",")[0].casefold():
+        raise ValueError(f"ATB product mismatch: {title}")
+    code = single_element(card, ".custom-tag__text strong[data-available]")
+    if code.get_text(strip=True) != product["sku"] or code["data-available"] != "1":
+        raise ValueError("ATB SKU mismatch or product unavailable")
+    block = single_element(card, ".product-about__buy-row .product-price--weight")
+    current = single_element(block, "data.product-price__top")
+    unit = single_element(current, "abbr").get_text(strip=True)
+    if unit != "грн/кг":
+        raise ValueError(f"Unexpected ATB unit: {unit}")
+
+    def amount(tag):
+        raw = single_element(tag, ":scope > span").get_text(strip=True)
+        if not re.fullmatch(r"[0-9]{1,5}[.,][0-9]{2}", raw):
+            raise ValueError(f"Ambiguous ATB amount: {raw}")
+        return Decimal(raw.replace(",", "."))
+
+    price = amount(current)
+    sale = "product-price--sale" in block.get("class", [])
+    if len(block.select("data")) != (2 if sale else 1):
+        raise ValueError("Ambiguous ATB price block")
+    regular = amount(single_element(block, "data.product-price__bottom")) if sale else None
+    return dict(price=str(price), **promo_fields(price, regular))
+
+
+def collect_atb(product):
+    request = Request(product["url"], headers={"User-Agent": "supplier-price-monitor/1.0"})
+    with urlopen(request, timeout=45) as response:
+        return parse_atb_prices(response.read().decode("utf-8"), product)
+
+
 def main():
     with (ROOT / "products.csv").open(encoding="utf-8-sig", newline="") as stream:
         products = list(csv.DictReader(stream))
@@ -183,28 +253,12 @@ def main():
         for product in products:
             sku = product["sku"]
             try:
-                response = page.goto(product["url"], wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_timeout(6000)
-                if not response or response.status != 200:
-                    raise ValueError(f"HTTP status: {response.status if response else 'none'}")
-                title = page.title().casefold()
-                if product["product"].split(",")[0].casefold() not in title:
-                    raise ValueError(f"Product title mismatch: {title[:120]}")
-                # Scope extraction to the product detail section, never site-wide
-                # recommendations or other cards.
-                details = page.locator("h1").first.evaluate("""(heading, sku) => {
-                    let node = heading;
-                    for (let depth = 0; depth < 7 && node; depth++, node = node.parentElement) {
-                        const text = node.innerText || "";
-                        if (text.includes(sku) && text.length < 2500 && /грн/.test(text)) {
-                            return text;
-                        }
-                    }
-                    return null;
-                }""", sku)
-                if not details:
-                    raise ValueError("Cannot isolate product details containing title, SKU and price")
-                prices = parse_product_prices(details, sku)
+                if product["supplier"] == "АТБ":
+                    prices = collect_atb(product)
+                elif product["supplier"] == "Фора":
+                    prices = collect_fora(page, product)
+                else:
+                    raise ValueError(f"Unsupported supplier: {product['supplier']}")
                 record = dict(date=today, checked_at=now.isoformat(), supplier=product["supplier"],
                               sku=sku, product=product["product"], currency=product["currency"],
                               url=product["url"], **prices)
