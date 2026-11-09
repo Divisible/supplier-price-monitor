@@ -38,6 +38,10 @@ class OutOfStock(ValueError):
     """The identified product has an explicit unavailable flag."""
 
 
+class ForaCardError(ValueError):
+    """Carries a fixed diagnostic code safe to write to collection_status.csv."""
+
+
 PRICE_PATTERN = re.compile(r"^\s*(\d{1,6})(?:[,.](\d{1,2}))?\s*грн\s*$", re.I)
 
 
@@ -67,20 +71,25 @@ def promo_fields(price, regular=None):
     return dict(regular_price=str(regular), discount_pct=str(discount), is_promo="true")
 
 
-def parse_product_prices(details, sku):
+def parse_product_prices(details, sku, expected_unit=None):
     # Anchor to the SKU/unit and require the complete price block before the
     # purchase button. Additional price candidates or unfamiliar text fail closed.
     normalized = details.replace("\xa0", " ").strip()
+    sku_line = re.search(r"(?m)^[ \t]*" + re.escape(sku) + r"[ \t]*$", normalized)
+    if not sku_line:
+        raise ForaCardError("SKU_NOT_FOUND")
     if len(re.findall(r"(?<!\d)" + re.escape(sku) + r"(?!\d)", normalized)) != 1:
-        raise ValueError("Missing or ambiguous product SKU")
-    tail = normalized.split(sku, 1)[1]
-    if re.search(r"(?im)^\s*(немає в наявності|відсутній у продажу)\s*$", tail):
+        raise ForaCardError("SKU_AMBIGUOUS")
+    if "Артикул:" in normalized and not normalized[:sku_line.start()].rstrip().endswith("Артикул:"):
+        raise ForaCardError("SKU_NOT_FOUND")
+    tail = normalized[sku_line.end():]
+    if re.search(r"(?im)^\s*(немає в наявності|відсутній у продажу)\s*$", normalized):
         raise OutOfStock()
     block, separator, _ = tail.partition("В кошик")
     if not separator:
         raise PriceMissing()
     pattern = (
-        r"\s*(?:кг|шт|л|г)\s*\n"
+        r"\s*(?P<unit>кг|шт|л|г)\s*\n"
         r"(?:\s*(?P<regular>\d{1,5}[,.]\d{2})[ \t]*грн\s*\n"
         r"\s*[-−]\d{1,2}(?:[,.]\d{1,2})?%\s*\n)?"
         r"\s*(?P<major>\d{1,5})[ \t]*\n"
@@ -89,6 +98,8 @@ def parse_product_prices(details, sku):
     match = re.fullmatch(pattern, block, re.I)
     if not match:
         raise PriceMissing()
+    if expected_unit and match["unit"].casefold() != expected_unit:
+        raise ForaCardError("UNIT_MISMATCH")
     price = Decimal(match["major"] + "." + match["minor"])
     regular = Decimal(match["regular"].replace(",", ".")) if match["regular"] else None
     return dict(price=str(price), **promo_fields(price, regular))
@@ -199,10 +210,10 @@ def collect_fora(page, product):
     response = page.goto(product["url"], wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(6000)
     if not response or response.status != 200:
-        raise ValueError(f"HTTP status: {response.status if response else 'none'}")
+        raise ForaCardError("HTTP_ERROR")
     title = page.title().casefold()
     if product["product"].split(",")[0].casefold() not in title:
-        raise ValueError(f"Product title mismatch: {title[:120]}")
+        raise ForaCardError("PRODUCT_TITLE_MISMATCH")
     # Scope extraction to the product detail section, never site-wide
     # recommendations or other cards.
     details = page.locator("h1").first.evaluate("""(heading, sku) => {
@@ -218,9 +229,10 @@ def collect_fora(page, product):
     if not details:
         # Missing SKU can also indicate a broken or unrelated product page.
         if not page.get_by_text(sku, exact=True).count():
-            raise ValueError("Cannot verify Fora SKU")
+            raise ForaCardError("SKU_NOT_FOUND")
         raise PriceMissing()
-    return parse_product_prices(details, sku)
+    _, _, unit = product["product"].rpartition(", ")
+    return parse_product_prices(details, sku, unit or None)
 
 
 def single_element(parent, selector):
@@ -354,9 +366,13 @@ def main():
                 else:
                     raise ValueError("Unsupported supplier")
             except OutOfStock:
-                status, reason = "out_of_stock", "Источник подтвердил отсутствие товара."
+                status = "out_of_stock"
+                reason = "OUT_OF_STOCK" if supplier == "Фора" else "Источник подтвердил отсутствие товара."
             except PriceMissing:
-                status, reason = "price_missing", "Цена в карточке отсутствует или не прошла проверку."
+                status = "price_missing"
+                reason = "PRICE_BLOCK_MISSING_OR_INVALID" if supplier == "Фора" else "Цена в карточке отсутствует или не прошла проверку."
+            except ForaCardError as exc:
+                status, reason = "error", str(exc)
             except HTTPError as exc:
                 status, reason = "error", f"HTTP {exc.code}"
             except (URLError, TimeoutError):
