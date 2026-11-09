@@ -83,9 +83,9 @@ def change_color(value):
     return "color: #B91C1C" if value > 0 else "color: #15803D"
 
 
-def styled_table(data, config, *, money=(), percent=()):
+def styled_table(data, config, *, money=(), percent=(), formats=None):
     # Styler supplies display strings; Arrow still carries numeric values for sorting.
-    formats = {}
+    formats = dict(formats or {})
     for field in money:
         formats[field] = lambda v: metric_amount(v, "₴")
     for field in percent:
@@ -94,7 +94,7 @@ def styled_table(data, config, *, money=(), percent=()):
         if field in data:
             formats[field] = lambda v, u=unit: metric_amount(v, u, signed=True)
     style = data.style.format(formats, na_rep="—")
-    for field in ("change", "change_pct"):
+    for field in ("change", "change_pct", "promo_difference"):
         if field in data:
             style = style.map(change_color, subset=[field])
     for field in ("status", "Свежесть", "Цена среди свежих"):

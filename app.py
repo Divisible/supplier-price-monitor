@@ -1,5 +1,6 @@
 """Read-only price history dashboard. Run with streamlit run app.py."""
 import csv
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -79,6 +80,7 @@ def load_history(path=HISTORY):
         raise ValueError("Скидка в CSV не соответствует двум ценам.")
     if (~known_regular & stated & data["discount_pct"].ne(0)).any():
         raise ValueError("Для скидки отсутствует обычная цена.")
+    data["reported_discount"] = data["discount_pct"].copy()
     # Recalculate only when both actual and regular prices are known.
     data.loc[known_regular, "discount_pct"] = calculated[known_regular]
     daily_key = [*KEY, "date"]
@@ -118,32 +120,79 @@ def show_table(data, columns, extra_prices=()):
     styled_table(display, config, money=money, percent=["discount_pct"] if "discount_pct" in display else [])
 
 
-def show_current_prices(current):
-    columns = ["product", "price", "supplier", "change", "change_pct", "discount_pct",
-               "is_promo", "regular_price", "sku"]
+PRICE_LABELS = {
+    "canonical_name": "Главный товар", "supplier": "Поставщик", "sku": "Артикул", "product": "Товар",
+    "normal_price": "Цена обычная, грн", "promo_price": "Цена в акцию, грн",
+    "promo_difference": "Разница, грн", "reported_discount": "% скидки",
+}
+PRICE_FIELDS = ["normal_price", "promo_price", "promo_difference", "reported_discount"]
+
+
+def table_prices(rows):
+    rows = rows.copy()
+    promo = rows["is_promo"].eq(True).fillna(False)
+    rows["normal_price"] = rows["price"].where(~promo, rows["regular_price"])
+    rows["promo_price"] = rows["price"].where(promo)
+    rows["promo_difference"] = rows["promo_price"] - rows["normal_price"]
+    rows["reported_discount"] = rows["reported_discount"].where(promo)
+    return rows
+
+
+def show_price_table(rows, overview=False):
+    config = {field: st.column_config.NumberColumn(PRICE_LABELS[field]) for field in PRICE_FIELDS}
+    formats = {}
+    if overview:
+        columns = ["canonical_name", *KEY, "url", *PRICE_FIELDS]
+        config.update({field: PRICE_LABELS[field] for field in ["canonical_name", *KEY]})
+        config["url"] = st.column_config.LinkColumn("Товар")
+        formats["url"] = dict(zip(rows["url"], rows["product"])).get
+    else:
+        columns = ["date", "checked_at", *PRICE_FIELDS, "url"]
+        config.update(date=st.column_config.DateColumn("Дата", format="DD.MM.YYYY"),
+                      checked_at=st.column_config.DatetimeColumn("Проверено по Киеву", timezone="Europe/Kyiv",
+                                                                format="DD.MM.YYYY HH"),
+                      url=st.column_config.LinkColumn("Карточка товара", display_text="Открыть"))
+    styled_table(rows[columns], config, money=PRICE_FIELDS[:3], percent=["reported_discount"], formats=formats)
+
+
+def show_current_prices(catalog, fresh):
+    fields = [*KEY, "price", "is_promo", "regular_price", "reported_discount"]
+    current = catalog.merge(fresh.reindex(columns=fields), on=KEY, how="left", validate="one_to_one")
+    try:
+        current = current.merge(load_mapping()[[*KEY, "canonical_name"]], on=KEY, how="left")
+    except (OSError, ValueError) as exc:
+        st.warning(f"Названия главных товаров недоступны. {exc}")
+        current["canonical_name"] = pd.NA
+    current = table_prices(current)
     page_size = 20
     page_count = (len(current) + page_size - 1) // page_size
     if page_count > 1:
         sort, direction, pager = st.columns([2, 2, 1])
-        field = sort.selectbox("Сортировать по", columns, index=columns.index("supplier"), format_func=LABELS.get)
+        field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
         order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
         current = current.sort_values(field, ascending=order == "По возрастанию", kind="stable")
         page = pager.selectbox("Страница", range(1, page_count + 1))
         start = (page - 1) * page_size
         current = current.iloc[start:start + page_size]
-    show_table(current, columns)
+    show_price_table(current, overview=True)
 
 
-def daily_axis(dates):
-    dates = dates.drop_duplicates().sort_values()
-    step = max(1, (len(dates) + 7) // 8)
-    ticks = [alt.DateTime(year=day.year, month=day.month, date=day.day, utc=True)
-             for day in dates.iloc[::step]]
-    return alt.X("date:T", title="Дата", scale=alt.Scale(type="utc"),
-                 axis=alt.Axis(format="%d.%m.%Y", values=ticks))
+def daily_axis(dates, days, today):
+    first = today - timedelta(days=days - 1) if days else dates.min().date()
+    last = today if days else dates.max().date()
+    ticks = [alt.DateTime(year=d.year, month=d.month, date=d.day, utc=True)
+             for d in pd.date_range(first, max(last, first + timedelta(days=1)))]
+    return alt.X("date:T", title="Дата", scale=alt.Scale(type="utc", domain=[ticks[0], ticks[-1]], nice=False),
+                 axis=alt.Axis(format="%d.%m.%Y", values=ticks, labelOverlap=True))
 
 
-def show_daily_chart(selected):
+def price_scale(values):
+    low = math.floor(values.min() / 100) * 100
+    high = math.ceil(values.max() / 100) * 100
+    return alt.Scale(domain=[low, max(high, low + 100)], nice=False, zero=False)
+
+
+def show_daily_chart(selected, days, today):
     prices = selected[["date", "price", "regular_price"]].rename(columns={
         "price": "Цена продажи", "regular_price": "Обычная цена"})
     if prices["Обычная цена"].isna().all():
@@ -157,8 +206,8 @@ def show_daily_chart(selected):
     prices["День"] = prices["date"].dt.strftime("%d.%m.%Y")
     prices["date"] = prices["date"].dt.tz_localize("UTC")
     chart = alt.Chart(prices).mark_line(point=True).encode(
-        x=daily_axis(prices["date"]),
-        y=alt.Y("Цена:Q", title="грн", scale=alt.Scale(zero=False)),
+        x=daily_axis(prices["date"], days, today),
+        y=alt.Y("Цена:Q", title="грн", scale=price_scale(prices["Цена"])),
         color=alt.Color("Тип цены:N", scale=alt.Scale(domain=series, range=["#2563EB", "#64748B"])),
         strokeDash=alt.StrokeDash("Тип цены:N", scale=alt.Scale(domain=series, range=[[1, 0], [6, 4]])),
         detail="segment:N",
@@ -206,7 +255,7 @@ def show_comparison(data, today):
     names = mapping.set_index("product_id")["canonical_name"].to_dict()
     left, right = st.columns([2, 1])
     product_id = left.selectbox("Главный товар", list(names), format_func=names.get)
-    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"], index=1)
+    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"])
     group = mapping.loc[mapping["product_id"].eq(product_id) & mapping["match_type"].ne("unmatched")]
     if group.empty:
         st.info("Для этого товара нет сопоставимых позиций.")
@@ -246,8 +295,9 @@ def show_comparison(data, today):
         show_table(latest.loc[~fresh], columns)
 
     st.subheader("История цен поставщиков")
-    if period != "Весь период":
-        start = today - timedelta(days=int(period.split()[0]) - 1)
+    days = None if period == "Весь период" else int(period.split()[0])
+    if days:
+        start = today - timedelta(days=days - 1)
         rows = rows.loc[rows["date"].dt.date >= start]
     if rows.empty:
         st.info("За выбранный период наблюдений нет.")
@@ -261,8 +311,8 @@ def show_comparison(data, today):
     suppliers = sorted(rows["supplier"].unique())
     colors, dashes, shapes = supplier_scales(suppliers)
     base = alt.Chart(rows).encode(
-        x=daily_axis(rows["date"]), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
-                                          scale=alt.Scale(zero=False)),
+        x=daily_axis(rows["date"], days, today), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
+                                          scale=price_scale(rows["price"])),
         color=alt.Color("supplier:N", title="Поставщик", scale=colors), detail="segment:N",
         tooltip=["День:N", alt.Tooltip("supplier:N", title="Поставщик"),
                  price_tooltip()])
@@ -417,7 +467,7 @@ def main():
         st.button("Перезагрузить данные", help="Повторно загрузить доступные Dashboard данные. Новый сбор цен не запускается")
     overview, history, comparison, promos, status = st.tabs(["Обзор", "История", "Сравнение", "Промоакции", "Состояние данных"])
     try:
-        catalog = pd.read_csv(HISTORY.parent.parent / "products.csv", dtype=str, usecols=[*KEY, "product"])
+        catalog = pd.read_csv(HISTORY.parent.parent / "products.csv", dtype=str, usecols=[*KEY, "product", "url"])
     except (OSError, ValueError):
         catalog = None
     try:
@@ -432,6 +482,9 @@ def main():
             with tab:
                 st.info("Успешных наблюдений пока нет." if error == "В истории пока нет наблюдений."
                         else "Данные недоступны. Подробности на вкладке «Состояние данных».")
+        if catalog is not None:
+            with overview:
+                show_current_prices(catalog, data)
         with status:
             st.warning(error)
             show_diagnostics(pd.DataFrame(), datetime.now(KYIV).date(), catalog)
@@ -443,30 +496,26 @@ def main():
     today = datetime.now(KYIV).date()
     fresh = current["date"].dt.date.map(lambda day: freshness(day, today)).eq("Свежая")
     active = current.loc[current["is_promo"].eq(True).fillna(False) & fresh]
+    items = catalog if catalog is not None else current[[*KEY, "product", "url"]]
     with overview:
         metric_cards("overview",
                 ["Товаров", "Поставщиков", "Активных акций", "Последнее наблюдение"],
-                [len(current), current["supplier"].nunique(), len(active), last.strftime("%d.%m.%Y")])
+                [len(items), items["supplier"].nunique(), len(active), last.strftime("%d.%m.%Y")])
         st.subheader("Актуальные цены")
         if catalog is not None:
             tracked = catalog.set_index(KEY).index
             observed = current.loc[fresh].set_index(KEY).index
             st.caption(f"Свежие цены: {tracked.isin(observed).sum()} из {len(tracked)} · Сегодня или вчера по Киеву")
-        st.caption("Относительно предыдущей цены: рост (+) — красным, снижение (−) — зелёным. Прочерк — нет сравнения.")
+        st.caption("Без подтверждённой акции показана наблюдаемая цена. Разница — акционная цена минус обычная.")
         if (~fresh).any():
             st.warning("Устаревшие или будущие наблюдения исключены из актуальных цен. Подробности — в «Состоянии данных».")
-        if fresh.any():
-            show_current_prices(current.loc[fresh])
-        else:
-            st.info("Свежих цен нет. Последние успешные наблюдения доступны в «Состоянии данных».")
-        if current["previous_price"].isna().any():
-            st.info("Для части товаров пока есть только одно наблюдение. Изменение цены появится после следующего.")
+        show_current_prices(items, current.loc[fresh])
     with history:
         left, middle, right = st.columns([1, 2, 1])
         supplier = left.selectbox("Поставщик", sorted(data["supplier"].unique()))
         products = current.loc[current["supplier"].eq(supplier)].set_index("sku")["product"].to_dict()
         sku = middle.selectbox("Товар", list(products), format_func=lambda key: f"{products[key]} · {key}")
-        period = right.selectbox("Период", ["7 дней", "30 дней", "60 дней", "90 дней", "Весь период"], index=1)
+        period = right.selectbox("Период", ["7 дней", "30 дней", "60 дней", "90 дней", "Весь период"])
         days = None if period == "Весь период" else int(period.split()[0])
         selected = filter_history(data, supplier, sku, days, today)
         if selected.empty:
@@ -474,8 +523,8 @@ def main():
         else:
             if len(selected) < 2:
                 st.info("Одно наблюдение за период. Для линии изменения цены нужно хотя бы два.")
-            show_daily_chart(selected)
-            show_table(selected, ["date", "checked_at", "price", "regular_price", "discount_pct", "is_promo", "url"])
+            show_daily_chart(selected, days, today)
+            show_price_table(table_prices(selected))
     with comparison:
         show_comparison(data, today)
     with promos:
