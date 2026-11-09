@@ -230,11 +230,20 @@ def single_element(parent, selector):
     return elements[0]
 
 
+def catalog_title_and_unit(product):
+    # A catalog name may end in an explicit sales unit; older unsuffixed names are per kg.
+    title, _, unit = product["product"].rpartition(", ")
+    if title and unit in ("кг", "шт"):
+        return title, unit
+    return product["product"], "кг"
+
+
 def parse_atb_prices(html, product):
     soup = BeautifulSoup(html, "html.parser")
     card = single_element(soup, "section.product-page")
     title = single_element(card, "h1").get_text(strip=True)
-    if title.casefold() != product["product"].split(",")[0].casefold():
+    expected_title, expected_unit = catalog_title_and_unit(product)
+    if title.casefold() != expected_title.casefold():
         raise ValueError(f"ATB product mismatch: {title}")
     code = single_element(card, ".custom-tag__text strong[data-available]")
     if code.get_text(strip=True) != product["sku"]:
@@ -244,16 +253,16 @@ def parse_atb_prices(html, product):
     if code["data-available"] != "1":
         raise ValueError("Unknown ATB availability")
     try:
-        return atb_weight_price(card)
+        return atb_product_price(card, expected_unit)
     except ValueError as exc:
         raise PriceMissing() from exc
 
 
-def atb_weight_price(card):
+def atb_product_price(card, expected_unit):
     block = single_element(card, ".product-about__buy-row .product-price--weight")
     current = single_element(block, "data.product-price__top")
     unit = single_element(current, "abbr").get_text(strip=True)
-    if unit != "грн/кг":
+    if unit != f"грн/{expected_unit}":
         raise ValueError(f"Unexpected ATB unit: {unit}")
 
     def amount(tag):
@@ -279,9 +288,10 @@ def collect_varus(product):
         raise ValueError("Missing VARUS product state")
     state, _ = json.JSONDecoder(parse_float=Decimal).raw_decode(html.split(marker, 1)[1].lstrip())
     item = state["product"]["current"]
+    expected_title, expected_unit = catalog_title_and_unit(product)
     if (state["route"]["path"].rstrip("/") != f"/kyiv/{slug}"
-            or str(item["sku"]) != product["sku"] or item["name"] != product["product"]
-            or item["unit"] != "kg"):
+            or str(item["sku"]) != product["sku"] or item["name"] != expected_title
+            or item["unit"] != {"кг": "kg", "шт": "pc"}[expected_unit]):
         raise ValueError("VARUS city, product, unit or availability mismatch")
     if item["stock"]["is_in_stock"] is False:
         raise OutOfStock()
