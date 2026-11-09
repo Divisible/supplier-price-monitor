@@ -63,6 +63,17 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(monitor.parse_product_prices(NORMAL, "32550"),
                          dict(price="79.90", regular_price="", discount_pct="0", is_promo="false"))
 
+    def test_fora_unavailable_before_sku(self):
+        card = "Яблуко Ред Чіф, кг\nнемає в наявності\nАртикул:\n593870\nкг\n29\n90 грн\nХОЧУ ЗАМОВИТИ"
+        with self.assertRaises(monitor.OutOfStock):
+            monitor.parse_product_prices(card, "593870", "кг")
+        with self.assertRaisesRegex(monitor.ForaCardError, "^SKU_NOT_FOUND$"):
+            monitor.parse_product_prices(card, "29", "кг")
+
+    def test_fora_wrong_sales_unit(self):
+        with self.assertRaisesRegex(monitor.ForaCardError, "^UNIT_MISMATCH$"):
+            monitor.parse_product_prices(NORMAL, "32550", "шт")
+
     def test_promo(self):
         self.assertEqual(monitor.parse_product_prices(PROMO, "32485"),
                          dict(price="68.90", regular_price="76.90", discount_pct="10.40", is_promo="true"))
