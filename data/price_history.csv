@@ -95,7 +95,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-10,2026-11-10T09:34:07.882126+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,84.90,https://varus.ua/greypfrut-vag,,0,false
 2026-11-10,2026-11-10T09:34:10.129997+02:00,Варус,127810,"Помело вагове, кг",UAH,109.90,https://varus.ua/pomelo-vag,,0,false
 2026-11-10,2026-11-10T09:34:12.378413+02:00,Варус,128915,"Гранат ваговий, кг",UAH,109.90,https://varus.ua/granat-vag,139.9,21.44,true
-2026-11-10,2026-11-10T09:34:16.356377+02:00,Варус,128923,"Ківі вагове, кг",UAH,119.90,https://varus.ua/kivi-vag,,0,false
+2026-11-10,2026-11-10T17:42:35.198677+02:00,Варус,128923,"Ківі вагове, кг",UAH,109.90,https://varus.ua/kivi-vag,,0,false
 2026-11-10,2026-11-10T09:34:20.291429+02:00,Варус,128941,"Яблуко Гала вагове, кг",UAH,17.90,https://varus.ua/yabluko-gala-1-gatunok-vag,,0,false
 2026-11-10,2026-11-10T09:34:18.332990+02:00,Варус,128951,"Яблуко Голден вагове, кг",UAH,29.90,https://varus.ua/yabluko-golden-1-gatunok-vag,,0,false
 2026-11-10,2026-11-10T09:34:14.508059+02:00,Варус,159700,"Хурма Персимона солодка вагова, кг",UAH,119.90,https://varus.ua/hurma-persimona-vag,149.9,20.01,true
@@ -117,7 +117,9 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-10,2026-11-10T09:31:45.280679+02:00,Фора,32550,"Лимон, кг",UAH,79.90,https://fora.ua/product/lymon-32550,,0,false
 2026-11-10,2026-11-10T09:32:43.020839+02:00,Фора,32551,"Мандарин, кг",UAH,72.90,https://fora.ua/product/mandaryn-32551,,0,false
 2026-11-10,2026-11-10T09:32:16.790230+02:00,Фора,32589,"Томат, кг",UAH,96.90,https://fora.ua/product/tomat-32589,,0,false
+2026-11-10,2026-11-10T17:40:29.090518+02:00,Фора,32887,"Перець червоний, кг",UAH,169.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
 2026-11-10,2026-11-10T09:33:45.911137+02:00,Фора,340212,"Ківі Голд кошик, шт",UAH,79.90,https://fora.ua/product/kivi-gold-koshyk-340212,,0,false
 2026-11-10,2026-11-10T09:33:27.043655+02:00,Фора,58480,"Яблуко Голден, кг",UAH,39.90,https://fora.ua/product/yabluko-golden-58480,,0,false
+2026-11-10,2026-11-10T17:41:58.395421+02:00,Фора,593870,"Яблуко Ред Чіф, кг",UAH,29.90,https://fora.ua/product/yabluko-red-chif-593870,,0,false
 2026-11-10,2026-11-10T09:32:55.618700+02:00,Фора,837324,"Помело, кг",UAH,79.90,https://fora.ua/product/pomelo-837324,,0,false
 2026-11-10,2026-11-10T09:33:14.469899+02:00,Фора,837334,"Хурма Шарон, кг",UAH,109.90,https://fora.ua/product/khurma-sharon-837334,149.90,26.68,true
