@@ -155,26 +155,53 @@ def show_price_table(rows, overview=False):
     styled_table(rows[columns], config, money=PRICE_FIELDS[:3], percent=["reported_discount"], formats=formats)
 
 
-def show_current_prices(catalog, fresh):
+def page_rows(rows, size, key):
+    count = max(1, math.ceil(len(rows) / size))
+    page = min(st.session_state.get(key, 1), count)
+    st.session_state[key] = page
+    if count > 1:
+        with st.container(horizontal=True, gap="small"):
+            def button(label, target, disabled=False, active=False):
+                st.button(label, key=f"{key}_{label}", disabled=disabled,
+                          type="primary" if active else "secondary",
+                          on_click=st.session_state.update, args=({key: target},))
+
+            button("‹ Назад", page - 1, page == 1)
+            previous = 0
+            for n in sorted({1, count, *range(max(1, page - 1), min(count, page + 1) + 1)}):
+                if n > previous + 1:
+                    st.text("…", width="content")
+                button(str(n), n, active=n == page)
+                previous = n
+            button("Вперёд ›", page + 1, page == count)
+    return rows.iloc[(page - 1) * size:page * size]
+
+
+def show_current_prices(catalog, fresh, mapping):
     fields = [*KEY, "price", "is_promo", "regular_price", "reported_discount"]
     current = catalog.merge(fresh.reindex(columns=fields), on=KEY, how="left", validate="one_to_one")
-    try:
-        current = current.merge(load_mapping()[[*KEY, "canonical_name"]], on=KEY, how="left")
-    except (OSError, ValueError) as exc:
-        st.warning(f"Названия главных товаров недоступны. {exc}")
+    if mapping is None:
         current["canonical_name"] = pd.NA
+    else:
+        current = current.merge(mapping[[*KEY, "canonical_name"]], on=KEY, how="left")
     current = table_prices(current)
-    page_size = 20
-    page_count = (len(current) + page_size - 1) // page_size
-    if page_count > 1:
-        sort, direction, pager = st.columns([2, 2, 1])
-        field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
-        order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
-        current = current.sort_values(field, ascending=order == "По возрастанию", kind="stable")
-        page = pager.selectbox("Страница", range(1, page_count + 1))
-        start = (page - 1) * page_size
-        current = current.iloc[start:start + page_size]
-    show_price_table(current, overview=True)
+    query = st.text_input("Поиск по товару, поставщику или артикулу", on_change=st.session_state.update,
+                          args=({"overview_page": 1},)).strip()
+    if query:
+        matches = current[["product", *KEY]].apply(
+            lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
+        current = current.loc[matches.any(axis=1)]
+    sort, direction = st.columns(2)
+    field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
+    order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
+    if current.empty:
+        st.info("Ничего не найдено")
+        return
+    current = current.sort_values(field, ascending=order == "По возрастанию", kind="stable")
+    table = st.container()
+    page = page_rows(current, 10, "overview_page")
+    with table:
+        show_price_table(page, overview=True)
 
 
 def daily_axis(dates, days, today):
@@ -193,27 +220,23 @@ def price_scale(values):
 
 
 def show_daily_chart(selected, days, today):
-    prices = selected[["date", "price", "regular_price"]].rename(columns={
-        "price": "Цена продажи", "regular_price": "Обычная цена"})
-    if prices["Обычная цена"].isna().all():
-        prices = prices.drop(columns="Обычная цена")
-    prices = prices.melt(id_vars="date", var_name="Тип цены", value_name="Цена")
-    prices = prices.dropna(subset=["Цена"])
-    prices["price_label"] = prices["Цена"].map(lambda v: metric_amount(v, "₴"))
-    prices["segment"] = prices.groupby("Тип цены")["date"].diff().dt.days.ne(1).cumsum()
-    series = list(prices["Тип цены"].unique())
-    # Encode Kyiv calendar dates at UTC midnight so the browser cannot shift the day.
-    prices["День"] = prices["date"].dt.strftime("%d.%m.%Y")
+    prices = selected[["date", "price", "is_promo"]].copy()
     prices["date"] = prices["date"].dt.tz_localize("UTC")
-    chart = alt.Chart(prices).mark_line(point=True).encode(
-        x=daily_axis(prices["date"], days, today),
-        y=alt.Y("Цена:Q", title="грн", scale=price_scale(prices["Цена"])),
-        color=alt.Color("Тип цены:N", scale=alt.Scale(domain=series, range=["#2563EB", "#64748B"])),
-        strokeDash=alt.StrokeDash("Тип цены:N", scale=alt.Scale(domain=series, range=[[1, 0], [6, 4]])),
-        detail="segment:N",
-        tooltip=["День:N", "Тип цены:N", price_tooltip()],
-    )
-    st.altair_chart(style_chart(chart), theme=None, width="stretch")
+    prices["День"] = prices["date"].dt.strftime("%d.%m.%Y")
+    prices["Статус"] = prices["is_promo"].map({True: "Акция", False: "Без акции"}).fillna("Неизвестно")
+    prices["price_label"] = prices["price"].map(lambda v: metric_amount(v, "₴"))
+    prices["segment"] = prices["date"].diff().dt.days.ne(1).cumsum()
+    promo = prices.loc[prices["Статус"].eq("Акция")].copy()
+    promo["segment"] = promo["date"].diff().dt.days.ne(1).cumsum()
+
+    base = alt.Chart(prices).encode(x=daily_axis(prices["date"], days, today),
+                                    y=alt.Y("price:Q", title="грн", scale=price_scale(prices["price"])))
+    line = base.mark_line(color="#2563EB").encode(detail="segment:N")
+    red = line.properties(data=promo).mark_line(color="#DC2626")
+    points = base.mark_circle(size=65).encode(
+        color=alt.condition(alt.datum["Статус"] == "Акция", alt.value("#DC2626"), alt.value("#2563EB")),
+        tooltip=["День:N", price_tooltip(), "Статус:N"])
+    st.altair_chart(style_chart(line + red + points), theme=None, width="stretch")
 
 
 MATCH_LABELS = {"exact": "Точное", "equivalent": "Сопоставимое", "unmatched": "Без соответствия"}
@@ -246,16 +269,16 @@ def freshness(day, today):
     return "Свежая" if age <= 1 else "Устарела"
 
 
-def show_comparison(data, today):
-    try:
-        mapping = load_mapping()
-    except (OSError, ValueError) as exc:
-        st.warning(f"Сравнение недоступно. {exc}")
+def show_comparison(data, today, mapping):
+    if mapping is None:
+        st.info("Сравнение недоступно без справочника товаров.")
         return
     names = mapping.set_index("product_id")["canonical_name"].to_dict()
     left, right = st.columns([2, 1])
-    product_id = left.selectbox("Главный товар", list(names), format_func=names.get)
-    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"])
+    product_id = left.selectbox("Главный товар", list(names), format_func=names.get,
+                                on_change=st.session_state.update, args=({"compare_page": 1},))
+    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"],
+                             on_change=st.session_state.update, args=({"compare_page": 1},))
     group = mapping.loc[mapping["product_id"].eq(product_id) & mapping["match_type"].ne("unmatched")]
     if group.empty:
         st.info("Для этого товара нет сопоставимых позиций.")
@@ -263,11 +286,7 @@ def show_comparison(data, today):
     rows = data.merge(group, on=KEY, validate="many_to_one").sort_values(["supplier", "date"])
     rows = rows[rows["date"].dt.date <= today]
     latest = group.merge(rows.groupby("supplier").tail(1)[[*KEY, "date", "price"]], on=KEY, how="left")
-    latest["Соответствие"] = latest["match_type"].map(MATCH_LABELS)
     fresh = latest["date"].dt.date.map(lambda day: freshness(day, today)).eq("Свежая")
-    columns = ["supplier", "sku", "price", "date", "Соответствие"]
-    st.subheader("Актуальные цены")
-    st.caption("Учитываются наблюдения за сегодня и вчера по Киеву. Разница в процентах рассчитана от минимальной цены.")
     if fresh.any():
         prices = latest.loc[fresh, "price"]
         low, high = prices.min(), prices.max()
@@ -282,17 +301,8 @@ def show_comparison(data, today):
                      [metric_amount(low, "₴"), metric_amount(high, "₴"),
                       metric_amount(spread if len(prices) > 1 else None, "₴"),
                       metric_amount(100 * spread / low if len(prices) > 1 else None, "%")])
-        if len(prices) > 1:
-            latest["Цена среди свежих"] = at_minimum.map({True: "Минимум", False: "—"})
-            show_table(latest.loc[fresh], [*columns, "Цена среди свежих"])
-        else:
-            st.info("Для расчёта разницы нужны свежие цены двух поставщиков.")
-            show_table(latest.loc[fresh], columns)
     else:
         st.info("Нет свежих цен")
-    if (~fresh).any():
-        st.warning("У этих поставщиков наблюдение устарело или отсутствует. Их цены исключены из показателей.")
-        show_table(latest.loc[~fresh], columns)
 
     st.subheader("История цен поставщиков")
     days = None if period == "Весь период" else int(period.split()[0])
@@ -301,7 +311,18 @@ def show_comparison(data, today):
         rows = rows.loc[rows["date"].dt.date >= start]
     if rows.empty:
         st.info("За выбранный период наблюдений нет.")
-        return
+    else:
+        show_supplier_history(rows, group, days, today)
+
+    st.caption("Свежие цены — за сегодня или вчера по Киеву. Процентная разница рассчитана от минимальной свежей цены.")
+    if (~fresh).any():
+        missing = ", ".join(latest.loc[~fresh, "supplier"])
+        st.warning(f"Нет свежих наблюдений: {missing}. Эти поставщики исключены из расчёта.")
+    if group["match_type"].eq("equivalent").any():
+        st.caption("В группе есть сопоставимые товары: их характеристики могут различаться.")
+
+
+def show_supplier_history(rows, group, days, today):
     table = rows.pivot(index="date", columns="supplier", values="price").reindex(columns=group["supplier"])
     # Each sequence of consecutive observations gets its own line.
     gaps = rows.groupby("supplier")["date"].diff().dt.days.ne(1)
@@ -309,19 +330,19 @@ def show_comparison(data, today):
                        price_label=rows["price"].map(lambda v: metric_amount(v, "₴")),
                        date=rows["date"].dt.tz_localize("UTC"))
     suppliers = sorted(rows["supplier"].unique())
-    colors, dashes, shapes = supplier_scales(suppliers)
+    colors, _, _ = supplier_scales(suppliers)
     base = alt.Chart(rows).encode(
         x=daily_axis(rows["date"], days, today), y=alt.Y("price:Q", title=f"грн/{group['unit'].iloc[0]}",
                                           scale=price_scale(rows["price"])),
         color=alt.Color("supplier:N", title="Поставщик", scale=colors), detail="segment:N",
         tooltip=["День:N", alt.Tooltip("supplier:N", title="Поставщик"),
                  price_tooltip()])
-    lines = base.mark_line(strokeWidth=2).encode(
-        strokeDash=alt.StrokeDash("supplier:N", title="Поставщик", scale=dashes))
-    points = base.mark_point(filled=True, size=65).encode(
-        shape=alt.Shape("supplier:N", title="Поставщик", scale=shapes))
-    st.altair_chart(style_chart(lines + points), theme=None, width="stretch")
-    show_table(table.reset_index(), ["date", *table.columns], extra_prices=table.columns)
+    chart = base.mark_line(strokeWidth=2) + base.mark_circle(size=65)
+    st.altair_chart(style_chart(chart), theme=None, width="stretch")
+    slot = st.container()
+    page = page_rows(table.sort_index(ascending=False), 30, "compare_page")
+    with slot:
+        show_table(page.reset_index(), ["date", *table.columns], extra_prices=table.columns)
 
 
 def promo_periods(data, today):
@@ -404,7 +425,7 @@ def show_promo_history(data, current, today):
 def show_diagnostics(current, today, catalog):
     if catalog is None:
         st.warning("Каталог не удалось прочитать. Диагностика позиций недоступна.")
-        return
+        return False
     positions = catalog.copy()
     try:
         path = HISTORY.with_name("collection_status.csv")
@@ -420,7 +441,7 @@ def show_diagnostics(current, today, catalog):
         positions = positions.merge(successes, on=KEY, how="left", validate="one_to_one")
     except (OSError, ValueError) as exc:
         st.warning(f"Не удалось загрузить диагностику: {exc}")
-        return
+        return False
     positions["date"] = pd.to_datetime(positions["date"])
     positions["Свежесть"] = positions["date"].dt.date.map(lambda day: freshness(day, today))
     positions["status"] = positions["status"].fillna("Нет попытки")
@@ -442,7 +463,7 @@ def show_diagnostics(current, today, catalog):
         positions = positions[positions["status"].eq(status)]
     if positions.empty:
         st.info("По выбранным фильтрам позиций нет.")
-        return
+        return path.exists()
     positions = positions.copy()
     positions["status"] = positions["status"].replace(statuses)
     positions["reason"] = positions["reason"].replace("", pd.NA)
@@ -455,6 +476,7 @@ def show_diagnostics(current, today, catalog):
                   Свежесть="Свежесть", reason="Причина")
     order = ["product", "supplier", "status", "checked_at", "reason", "price", "date", "Свежесть", "sku"]
     styled_table(positions[order], config, money=["price"])
+    return path.exists()
 
 
 def main():
@@ -464,12 +486,18 @@ def main():
         with st.container(horizontal=True, vertical_alignment="center", width="content"):
             st.title("SPM", anchor=False, width="content")
             st.caption("Supplier Price Monitor", width="content")
-        st.button("Перезагрузить данные", help="Повторно загрузить доступные Dashboard данные. Новый сбор цен не запускается")
+        refresh = st.button("Обновить отображение", help="Повторно прочитать данные Dashboard")
+    feedback = st.empty()
     overview, history, comparison, promos, status = st.tabs(["Обзор", "История", "Сравнение", "Промоакции", "Состояние данных"])
     try:
         catalog = pd.read_csv(HISTORY.parent.parent / "products.csv", dtype=str, usecols=[*KEY, "product", "url"])
     except (OSError, ValueError):
         catalog = None
+    try:
+        mapping = load_mapping()
+    except (OSError, ValueError) as exc:
+        mapping = None
+        st.warning(f"Справочник товаров недоступен. {exc}")
     try:
         data = load_history()
         error = "В истории пока нет наблюдений." if data.empty else None
@@ -478,13 +506,15 @@ def main():
     except (OSError, UnicodeError, csv.Error, ValueError) as exc:
         data, error = pd.DataFrame(), f"Не удалось прочитать историю. {exc}"
     if error:
+        if refresh:
+            feedback.error(error)
         for tab in [overview, history, comparison, promos]:
             with tab:
                 st.info("Успешных наблюдений пока нет." if error == "В истории пока нет наблюдений."
                         else "Данные недоступны. Подробности на вкладке «Состояние данных».")
         if catalog is not None:
             with overview:
-                show_current_prices(catalog, data)
+                show_current_prices(catalog, data, mapping)
         with status:
             st.warning(error)
             show_diagnostics(pd.DataFrame(), datetime.now(KYIV).date(), catalog)
@@ -501,7 +531,7 @@ def main():
         metric_cards("overview",
                 ["Товаров", "Поставщиков", "Активных акций", "Последнее наблюдение"],
                 [len(items), items["supplier"].nunique(), len(active), last.strftime("%d.%m.%Y")])
-        st.subheader("Актуальные цены")
+        show_current_prices(items, current.loc[fresh], mapping)
         if catalog is not None:
             tracked = catalog.set_index(KEY).index
             observed = current.loc[fresh].set_index(KEY).index
@@ -509,7 +539,6 @@ def main():
         st.caption("Без подтверждённой акции показана наблюдаемая цена. Разница — акционная цена минус обычная.")
         if (~fresh).any():
             st.warning("Устаревшие или будущие наблюдения исключены из актуальных цен. Подробности — в «Состоянии данных».")
-        show_current_prices(items, current.loc[fresh])
     with history:
         left, middle, right = st.columns([1, 2, 1])
         supplier = left.selectbox("Поставщик", sorted(data["supplier"].unique()))
@@ -526,7 +555,7 @@ def main():
             show_daily_chart(selected, days, today)
             show_price_table(table_prices(selected))
     with comparison:
-        show_comparison(data, today)
+        show_comparison(data, today, mapping)
     with promos:
         st.subheader("Действующие акции по последним наблюдениям")
         if active.empty:
@@ -538,7 +567,7 @@ def main():
             st.caption(f"Статус акции неизвестен у {unknown} товаров.")
         show_promo_history(data, current, today)
     with status:
-        show_diagnostics(current, today, catalog)
+        diagnostics_ok = show_diagnostics(current, today, catalog)
         left, right = st.columns(2)
         left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M"))
         right.metric("Записей истории", len(data))
@@ -550,6 +579,12 @@ def main():
         else:
             st.info("Последнее наблюдение датировано сегодня или вчера по Киеву.")
         st.caption("Источник — data/price_history.csv. Свежесть наблюдений не подтверждает успешность GitHub Actions или доставки в Google Drive.")
+
+    if refresh:
+        if catalog is not None and mapping is not None and diagnostics_ok:
+            feedback.success("Данные повторно загружены. Новый сбор цен не запускался.")
+        else:
+            feedback.error("Не удалось повторно загрузить все данные Dashboard.")
 
 
 if __name__ == "__main__":
