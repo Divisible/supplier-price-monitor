@@ -152,7 +152,8 @@ def show_price_table(rows, overview=False):
                       checked_at=st.column_config.DatetimeColumn("Проверено по Киеву", timezone="Europe/Kyiv",
                                                                 format="DD.MM.YYYY HH"),
                       url=st.column_config.LinkColumn("Карточка товара", display_text="Открыть"))
-    styled_table(rows[columns], config, money=PRICE_FIELDS[:3], percent=["reported_discount"], formats=formats)
+    styled_table(rows[columns], config, money=PRICE_FIELDS[:3], percent=["reported_discount"],
+                 formats=formats, height="content" if overview else "auto")
 
 
 def page_rows(rows, size, key):
@@ -185,13 +186,13 @@ def show_current_prices(catalog, fresh, mapping):
     else:
         current = current.merge(mapping[[*KEY, "canonical_name"]], on=KEY, how="left")
     current = table_prices(current)
-    query = st.text_input("Поиск по товару, поставщику или артикулу", on_change=st.session_state.update,
+    search, sort, direction = st.columns([2, 1.3, 1.3], vertical_alignment="bottom")
+    query = search.text_input("Поиск по товару, поставщику или артикулу", on_change=st.session_state.update,
                           args=({"overview_page": 1},)).strip()
     if query:
         matches = current[["product", *KEY]].apply(
             lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
         current = current.loc[matches.any(axis=1)]
-    sort, direction = st.columns(2)
     field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
     order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
     if current.empty:
@@ -199,7 +200,7 @@ def show_current_prices(catalog, fresh, mapping):
         return
     current = current.sort_values(field, ascending=order == "По возрастанию", kind="stable")
     table = st.container()
-    page = page_rows(current, 10, "overview_page")
+    page = page_rows(current, 15, "overview_page")
     with table:
         show_price_table(page, overview=True)
 
@@ -274,6 +275,7 @@ def show_comparison(data, today, mapping):
         st.info("Сравнение недоступно без справочника товаров.")
         return
     names = mapping.set_index("product_id")["canonical_name"].to_dict()
+    kpis = st.container()
     left, right = st.columns([2, 1])
     product_id = left.selectbox("Главный товар", list(names), format_func=names.get,
                                 on_change=st.session_state.update, args=({"compare_page": 1},))
@@ -290,19 +292,14 @@ def show_comparison(data, today, mapping):
     if fresh.any():
         prices = latest.loc[fresh, "price"]
         low, high = prices.min(), prices.max()
-        at_minimum = prices.eq(low)
-        suppliers = ", ".join(latest.loc[prices.index[at_minimum], "supplier"])
-        if len(prices) == 1:
-            st.caption(f"Единственная свежая цена: {suppliers}")
-        else:
-            st.caption(f"Минимальная свежая цена: {suppliers}")
         spread = high - low
-        metric_cards("compare", ["Минимум у поставщиков", "Максимум у поставщиков", "Разница, грн", "Разница, %"],
-                     [metric_amount(low, "₴"), metric_amount(high, "₴"),
-                      metric_amount(spread if len(prices) > 1 else None, "₴"),
-                      metric_amount(100 * spread / low if len(prices) > 1 else None, "%")])
+        with kpis:
+            metric_cards("compare", ["Минимум у поставщиков", "Максимум у поставщиков", "Разница, грн", "Разница, %"],
+                         [metric_amount(low, "₴"), metric_amount(high, "₴"),
+                          metric_amount(spread if len(prices) > 1 else None, "₴"),
+                          metric_amount(100 * spread / low if len(prices) > 1 else None, "%")])
     else:
-        st.info("Нет свежих цен")
+        kpis.info("Нет свежих цен")
 
     st.subheader("История цен поставщиков")
     days = None if period == "Весь период" else int(period.split()[0])
@@ -314,12 +311,9 @@ def show_comparison(data, today, mapping):
     else:
         show_supplier_history(rows, group, days, today)
 
-    st.caption("Свежие цены — за сегодня или вчера по Киеву. Процентная разница рассчитана от минимальной свежей цены.")
     if (~fresh).any():
         missing = ", ".join(latest.loc[~fresh, "supplier"])
         st.warning(f"Нет свежих наблюдений: {missing}. Эти поставщики исключены из расчёта.")
-    if group["match_type"].eq("equivalent").any():
-        st.caption("В группе есть сопоставимые товары: их характеристики могут различаться.")
 
 
 def show_supplier_history(rows, group, days, today):
@@ -532,11 +526,6 @@ def main():
                 ["Товаров", "Поставщиков", "Активных акций", "Последнее наблюдение"],
                 [len(items), items["supplier"].nunique(), len(active), last.strftime("%d.%m.%Y")])
         show_current_prices(items, current.loc[fresh], mapping)
-        if catalog is not None:
-            tracked = catalog.set_index(KEY).index
-            observed = current.loc[fresh].set_index(KEY).index
-            st.caption(f"Свежие цены: {tracked.isin(observed).sum()} из {len(tracked)} · Сегодня или вчера по Киеву")
-        st.caption("Без подтверждённой акции показана наблюдаемая цена. Разница — акционная цена минус обычная.")
         if (~fresh).any():
             st.warning("Устаревшие или будущие наблюдения исключены из актуальных цен. Подробности — в «Состоянии данных».")
     with history:
@@ -553,7 +542,7 @@ def main():
             if len(selected) < 2:
                 st.info("Одно наблюдение за период. Для линии изменения цены нужно хотя бы два.")
             show_daily_chart(selected, days, today)
-            show_price_table(table_prices(selected))
+            show_price_table(table_prices(selected.sort_values(["date", "checked_at"], ascending=False)))
     with comparison:
         show_comparison(data, today, mapping)
     with promos:

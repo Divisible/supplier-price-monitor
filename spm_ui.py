@@ -83,7 +83,7 @@ def change_color(value):
     return "color: #B91C1C" if value > 0 else "color: #15803D"
 
 
-def styled_table(data, config, *, money=(), percent=(), formats=None):
+def styled_table(data, config, *, money=(), percent=(), formats=None, height="auto"):
     # Styler supplies display strings; Arrow still carries numeric values for sorting.
     formats = dict(formats or {})
     for field in money:
@@ -104,4 +104,4 @@ def styled_table(data, config, *, money=(), percent=(), formats=None):
         style = style.map(lambda v: "color: #15803D" if pd.notna(v) and v > 0 else "",
                           subset=["discount_pct"])
     st.dataframe(style, column_config=config, column_order=list(data.columns), placeholder="—",
-                 hide_index=True, width="stretch")
+                 hide_index=True, width="stretch", height=height)
