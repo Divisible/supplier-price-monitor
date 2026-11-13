@@ -241,10 +241,10 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-13,2026-11-13T09:33:58.771418+02:00,Варус,128941,"Яблуко Гала вагове, кг",UAH,20.90,https://varus.ua/yabluko-gala-1-gatunok-vag,,0,false
 2026-11-13,2026-11-13T09:33:55.543250+02:00,Варус,128951,"Яблуко Голден вагове, кг",UAH,22.50,https://varus.ua/yabluko-golden-1-gatunok-vag,29.9,24.75,true
 2026-11-13,2026-11-13T09:33:51.563960+02:00,Варус,159700,"Хурма Персимона солодка вагова, кг",UAH,109.90,https://varus.ua/hurma-persimona-vag,129.9,15.40,true
-2026-11-13,2026-11-13T09:32:15.188950+02:00,Варус,2507408,Огірок тепличний ваговий,UAH,159.90,https://varus.ua/ogirok-teplichniy-1-gatunok-vag,,0,false
+2026-11-13,2026-11-13T17:29:46.136309+02:00,Варус,2507408,Огірок тепличний ваговий,UAH,129.90,https://varus.ua/ogirok-teplichniy-1-gatunok-vag,159.9,18.76,true
 2026-11-13,2026-11-13T09:32:16.742109+02:00,Варус,2544821,Перець червоний ваговий,UAH,169.90,https://varus.ua/perec-chervoniy-1-gatunok-vag,,0,false
 2026-11-13,2026-11-13T09:32:18.377621+02:00,Варус,2607223,Томат ваговий,UAH,96.90,https://varus.ua/pomidor-na-giltsivag,,0,false
-2026-11-13,2026-11-13T09:33:43.994983+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,79.90,https://varus.ua/mandarin-vagovij2,89.9,11.12,true
+2026-11-13,2026-11-13T17:31:22.030399+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,79.90,https://varus.ua/mandarin-vagovij2,,0,false
 2026-11-13,2026-11-13T09:34:02.761972+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-13,2026-11-13T09:32:11.100557+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,69.90,https://varus.ua/limon-biberciler-interdonato-vagovij,81.9,14.65,true
 2026-11-13,2026-11-13T09:33:02.028189+02:00,Фора,134544,"Ківі ваговий, кг",UAH,109.90,https://fora.ua/product/kivi-vagovyi-134544,,0,false
