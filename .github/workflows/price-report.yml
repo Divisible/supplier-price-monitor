@@ -26,6 +26,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
+      # Ubuntu 24.04 dependencies include Liberation Sans used by PNG reports.
       - run: python -m playwright install --with-deps chromium
         continue-on-error: true
       - name: Collect prices
@@ -62,7 +63,8 @@ jobs:
             data/collection_status.csv
           if-no-files-found: warn
           retention-days: 30
-      - name: Notify Telegram about today's price changes
+      # PNGs are rendered in a temporary folder; failures fall back to text.
+      - name: Send Telegram price notes with text fallback
         if: github.ref == 'refs/heads/main' && steps.collect.outputs.all_failed != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

@@ -6,10 +6,11 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from urllib.error import HTTPError, URLError
+from tempfile import TemporaryDirectory
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
+from uuid import uuid4
 
 import pandas as pd
 
@@ -65,18 +66,68 @@ def read_status_counts(path):
     return counts
 
 
-def send_message(token, chat_id, message):
-    endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = urlencode({"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}).encode()
-    request = Request(endpoint, data=payload, method="POST")
+def telegram_request(token, method, payload, content_type):
     try:
-        with urlopen(request, timeout=15) as response:
+        request = Request(f"https://api.telegram.org/bot{token}/{method}", data=payload,
+                          headers={"Content-Type": content_type}, method="POST")
+        with urlopen(request, timeout=60) as response:
             result = json.load(response)
-    except (HTTPError, URLError, TimeoutError) as exc:
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise ValueError("Rejected response")
+    except Exception:
         # Never include the request URL (which contains the token) in logs.
-        raise RuntimeError("Telegram API request failed; check token, chat ID and connectivity.") from None
-    if not result.get("ok"):
-        raise RuntimeError("Telegram rejected the message; check bot permissions and chat ID.")
+        raise RuntimeError("Telegram API request failed; delivery may be unconfirmed.") from None
+
+
+def send_message(token, chat_id, message):
+    # At most 4000 UTF-16 units, even when every character is an emoji.
+    for start in range(0, len(message), 2000):
+        payload = urlencode({"chat_id": chat_id, "text": message[start:start + 2000],
+                             "disable_web_page_preview": "true"}).encode()
+        telegram_request(token, "sendMessage", payload, "application/x-www-form-urlencoded")
+
+
+def send_images(token, chat_id, paths, caption):
+    if not paths:
+        raise ValueError("No report images generated")
+    # No retries: after a timeout Telegram may have accepted the upload.
+    # A later batch failure never restarts previously sent batches.
+    for start in range(0, len(paths), 10):
+        batch = paths[start:start + 10]
+        fields = {"chat_id": chat_id}
+        files = {}
+        if len(batch) == 1:
+            method = "sendPhoto"
+            files["photo"] = batch[0]
+            fields["caption"] = caption
+        else:
+            method = "sendMediaGroup"
+            media = []
+            for index, path in enumerate(batch):
+                name = f"page{start + index + 1}"
+                files[name] = path
+                item = {"type": "photo", "media": f"attach://{name}"}
+                if index == 0:
+                    item["caption"] = caption
+                media.append(item)
+            fields["media"] = json.dumps(media, ensure_ascii=False)
+        boundary = uuid4().hex
+        parts = []
+        for name, value in fields.items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+        for name, path in files.items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{name}.png"\r\nContent-Type: image/png\r\n\r\n'.encode())
+            parts.extend([path.read_bytes(), b"\r\n"])
+        parts.append(f"--{boundary}--\r\n".encode())
+        telegram_request(token, method, b"".join(parts), f"multipart/form-data; boundary={boundary}")
+
+
+def generate_images(history, today, output):
+    # Keep rendering imports inside the fallback boundary, including Pillow.
+    from price_notes import collection_summary, find_font, render_notes
+    changes, comparable = daily_changes(history, today)
+    footer = collection_summary(ROOT / "data" / "collection_status.csv")
+    return render_notes(changes, comparable, today, output, footer, find_font())
 
 
 def main():
@@ -92,9 +143,21 @@ def main():
     today = datetime.now(KYIV).date()
     counts = read_status_counts(ROOT / "data" / "collection_status.csv")
     message = build_report(history, today, counts)
-    send_message(token, chat_id, message)
-    print("Telegram daily summary sent.")
+    caption = "\n".join([*message.splitlines()[:2], DASHBOARD])
+    try:
+        with TemporaryDirectory(prefix="spm-price-notes-") as output:
+            paths = generate_images(history, today, Path(output))
+            send_images(token, chat_id, paths, caption)
+    except Exception:
+        print("PNG report failed or delivery unconfirmed; sending text fallback without retrying images.")
+        send_message(token, chat_id, message)
+        print("Telegram text fallback sent.")
+        return
+    print("Telegram PNG report sent.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        raise SystemExit("Telegram notification failed; check source data, credentials and connectivity.") from None
