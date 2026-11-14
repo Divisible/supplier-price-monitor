@@ -1,0 +1,23 @@
+name: Telegram report checks
+on:
+  pull_request:
+    paths:
+      - 'telegram_report.py'
+      - 'tests/test_telegram_report.py'
+      - '.github/workflows/telegram-report-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pandas 'streamlit>=1.67,<2' altair
+      - run: python -m unittest discover -s tests -p 'test_telegram_report.py'
