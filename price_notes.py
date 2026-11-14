@@ -99,7 +99,11 @@ def render_notes(changes, comparable, report_date, output, footer, font_path):
     font = lambda size: ImageFont.truetype(font_path, size)
     normal, small, title = font(23), font(20), font(36)
     sides = [changes.loc[changes["change"].gt(0)], changes.loc[changes["change"].lt(0)]]
-    packed = [layout_rows(side.sort_values(KEY).itertuples(index=False), normal) for side in sides]
+    packed = [
+        layout_rows(side.sort_values("change_pct", key=abs, ascending=False, kind="stable").itertuples(index=False), normal)
+        if not side.empty else []
+        for side in sides
+    ]
     count = max(1, *(len(pages) for pages in packed))
     output.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -115,40 +119,42 @@ def render_notes(changes, comparable, report_date, output, footer, font_path):
         text(WIDTH - 48 - small.getlength(header), 48, header, small)
         text(48, 102, f"Сравнено {comparable}   ·   Изменений {len(changes)}   ·   "
              f"Подорожали {len(sides[0])}   ·   Подешевели {len(sides[1])}", small)
-        for side, x in enumerate((48, 816)):
-            color = theme["redTextColor" if side == 0 else "greenTextColor"]
-            draw.rounded_rectangle((x, 150, x + 736, 792), radius=18, fill=theme["secondaryBackgroundColor"])
-            text(x + 26, 173, "PRICE NERFS" if side == 0 else "PRICE BUFFS", font(27), color)
-            text(x + 266, 180, "/ ПОДОРОЖАЛИ" if side == 0 else "/ ПОДЕШЕВЕЛИ", small, color)
-            y = 225
-            entries = packed[side][number] if number < len(packed[side]) else []
-            if not entries and not changes.empty:
-                text(x + 26, y + 30, "На этой странице изменений нет", small, theme["grayTextColor"])
-            for row, lines, height in entries:
-                # Draw arrows as geometry so glyph support does not affect direction.
-                tip = y + (2 if side == 0 else 21)
-                base = y + (13 if side == 0 else 10)
-                draw.polygon([(x + 25, tip), (x + 17, base), (x + 33, base)], fill=color)
-                draw.line((x + 25, y + 8, x + 25, y + 19), fill=color, width=3)
-                for index, line in enumerate(lines):
-                    text(x + 44, y + index * 27, line)
-                baseline = y + len(lines) * 27 + 7
-                supplier_color = SUPPLIER_STYLES.get(row.supplier, (theme["grayTextColor"],))[0]
-                text(x + 44, baseline, row.supplier, small, supplier_color)
-                prices = f"{amount(row.previous_price)} → {amount(row.price)} грн"
-                percent = f"{row.change_pct:+.2f}%".replace(".", ",")
-                price_font = small
-                available = 440 - small.getlength(percent) - 24
-                while price_font.getlength(prices) > available and price_font.size > 12:
-                    price_font = font(price_font.size - 1)
-                if price_font.getlength(prices) > available:
-                    raise ValueError("Значение цены не помещается в строку отчёта")
-                text(x + 260, baseline, prices, price_font)
-                text(x + 710 - small.getlength(percent), baseline, percent, small, color)
-                y += height
-                draw.line((x + 26, y - 10, x + 710, y - 10), fill="#E2E8F0")
+        if not changes.empty:
+            for side, x in enumerate((48, 816)):
+                color = theme["redTextColor" if side == 0 else "greenTextColor"]
+                draw.rounded_rectangle((x, 150, x + 736, 792), radius=18, fill=theme["secondaryBackgroundColor"])
+                text(x + 26, 173, "PRICE NERFS" if side == 0 else "PRICE BUFFS", font(27), color)
+                text(x + 266, 180, "/ ПОДОРОЖАЛИ" if side == 0 else "/ ПОДЕШЕВЕЛИ", small, color)
+                y = 225
+                entries = packed[side][number] if number < len(packed[side]) else []
+                if not entries:
+                    text(x + 26, y + 30, "На этой странице изменений нет", small, theme["grayTextColor"])
+                for row, lines, height in entries:
+                    # Draw arrows as geometry so glyph support does not affect direction.
+                    tip = y + (2 if side == 0 else 21)
+                    base = y + (13 if side == 0 else 10)
+                    draw.polygon([(x + 25, tip), (x + 17, base), (x + 33, base)], fill=color)
+                    draw.line((x + 25, y + 8, x + 25, y + 19), fill=color, width=3)
+                    for index, line in enumerate(lines):
+                        text(x + 44, y + index * 27, line)
+                    baseline = y + len(lines) * 27 + 7
+                    supplier_color = SUPPLIER_STYLES.get(row.supplier, (theme["grayTextColor"],))[0]
+                    text(x + 44, baseline, row.supplier, small, supplier_color)
+                    prices = f"{amount(row.previous_price)} → {amount(row.price)} грн"
+                    percent = f"{row.change_pct:+.2f}%".replace(".", ",")
+                    price_font = small
+                    available = 440 - small.getlength(percent) - 24
+                    while price_font.getlength(prices) > available and price_font.size > 12:
+                        price_font = font(price_font.size - 1)
+                    if price_font.getlength(prices) > available:
+                        raise ValueError("Значение цены не помещается в строку отчёта")
+                    text(x + 260, baseline, prices, price_font)
+                    text(x + 710 - small.getlength(percent), baseline, percent, small, color)
+                    y += height
+                    draw.line((x + 26, y - 10, x + 710, y - 10), fill="#E2E8F0")
         if changes.empty:
-            message = "Изменений цен нет"
+            draw.rounded_rectangle((48, 150, 1552, 792), radius=18, fill=theme["secondaryBackgroundColor"])
+            message = "Недостаточно данных для сравнения" if not comparable else "Изменений цен нет"
             text((WIDTH - title.getlength(message)) / 2, 350, message, title)
             detail = "Нет сопоставимых наблюдений за дату отчёта и предыдущий день" if not comparable else "Цены совпадают с предыдущим днём"
             text((WIDTH - small.getlength(detail)) / 2, 410, detail, small)
