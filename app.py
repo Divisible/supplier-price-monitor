@@ -138,7 +138,7 @@ def table_prices(rows):
     return rows
 
 
-def show_price_table(rows, overview=False):
+def show_price_table(rows, overview=False, promotions=False):
     config = {field: st.column_config.NumberColumn(PRICE_LABELS[field]) for field in PRICE_FIELDS}
     formats = {}
     if overview:
@@ -147,11 +147,14 @@ def show_price_table(rows, overview=False):
         config["url"] = st.column_config.LinkColumn("Товар")
         formats["url"] = dict(zip(rows["url"], rows["product"])).get
     else:
-        columns = ["date", "checked_at", *PRICE_FIELDS, "url"]
+        columns = ["date", *PRICE_FIELDS, "url"]
         config.update(date=st.column_config.DateColumn("Дата", format="DD.MM.YYYY"),
-                      checked_at=st.column_config.DatetimeColumn("Проверено по Киеву", timezone="Europe/Kyiv",
-                                                                format="DD.MM.YYYY HH"),
                       url=st.column_config.LinkColumn("Карточка товара", display_text="Открыть"))
+    if promotions:
+        config.update(normal_price=st.column_config.NumberColumn("Цена обычная"),
+                      promo_price=st.column_config.NumberColumn("Цена в акцию"),
+                      promo_difference=st.column_config.NumberColumn("Разница"),
+                      reported_discount=st.column_config.NumberColumn("Скидка, %"))
     styled_table(rows[columns], config, money=PRICE_FIELDS[:3], percent=["reported_discount"],
                  formats=formats, height="content" if overview else "auto")
 
@@ -186,13 +189,26 @@ def show_current_prices(catalog, fresh, mapping):
     else:
         current = current.merge(mapping[[*KEY, "canonical_name"]], on=KEY, how="left")
     current = table_prices(current)
-    search, sort, direction = st.columns([2, 1.3, 1.3], vertical_alignment="bottom")
-    query = search.text_input("Поиск по товару, поставщику или артикулу", on_change=st.session_state.update,
-                          args=({"overview_page": 1},)).strip()
-    if query:
-        matches = current[["product", *KEY]].apply(
-            lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
-        current = current.loc[matches.any(axis=1)]
+    search, sort, direction = st.columns([2, 1.3, 1.3])
+    with search:
+        entry, clear = st.columns([8, 1], vertical_alignment="bottom")
+        query = entry.text_input("Поиск по товару, поставщику или артикулу", key="overview_search",
+                                 live="300ms", on_change=st.session_state.update,
+                                 args=({"overview_page": 1},)).strip()
+        clear.button("×", help="Очистить поиск", on_click=st.session_state.update,
+                     args=({"overview_search": "", "overview_page": 1},))
+        if query:
+            fields = current[["product", "canonical_name", *KEY]].fillna("")
+            matches = fields.apply(
+                lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
+            suggestions = pd.Series(fields.to_numpy().ravel()).drop_duplicates()
+            suggestions = suggestions[suggestions.str.casefold().str.contains(query.casefold(), regex=False)]
+            suggestions = sorted(suggestions, key=lambda value: (
+                value.casefold() != query.casefold(), not value.casefold().startswith(query.casefold()), value.casefold()))
+            for index, value in enumerate(suggestions[:7]):
+                st.button(value, key=f"overview_suggestion_{index}", on_click=st.session_state.update,
+                          args=({"overview_search": value, "overview_page": 1},))
+            current = current.loc[matches.any(axis=1)]
     field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
     order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
     if current.empty:
@@ -370,20 +386,30 @@ def promo_periods(data, today):
     return pd.DataFrame(periods)
 
 
-def show_promo_history(data, current, today):
-    st.subheader("История промоакций")
+def promo_filters(data, mapping, key):
+    if mapping is None:
+        data = data.assign(product_id=pd.NA, canonical_name=pd.NA)
+    else:
+        data = data.merge(mapping[[*KEY, "product_id", "canonical_name"]], on=KEY, how="left",
+                          validate="many_to_one")
     left, middle, right = st.columns([1, 2, 1])
-    supplier = left.selectbox("Поставщик", [None, *sorted(current["supplier"].unique())],
-                              format_func=lambda value: value or "Все поставщики", key="promo_supplier")
+    supplier = left.selectbox("Поставщик", [None, *sorted(data["supplier"].unique())],
+                              format_func=lambda value: value or "Все поставщики", key=f"{key}_supplier")
+    names = data.dropna(subset=["product_id"]).set_index("product_id")["canonical_name"].to_dict()
+    item = middle.selectbox("Главный товар", [None, *names], key=f"{key}_item",
+                            format_func=lambda value: names[value] if value else "Все товары")
     if supplier is not None:
-        current = current[current["supplier"] == supplier]
-        data = data[data["supplier"] == supplier]
-    names = current.set_index(KEY)["product"].to_dict()
-    item = middle.selectbox("Товар", [None, *names], key="promo_item",
-                            format_func=lambda k: f"{names[k]} · {k[0]} · {k[1]}" if k else "Все товары")
+        data = data.loc[data["supplier"].eq(supplier)]
     if item is not None:
-        data = data[data["supplier"].eq(item[0]) & data["sku"].eq(item[1])]
-    window = right.selectbox("Период", [7, 30, 90, None], index=1, key="promo_window",
+        data = data.loc[data["product_id"].eq(item)]
+    return data, right
+
+
+def show_promo_history(data, current, today, mapping):
+    st.subheader("История промоакций")
+    kpis = st.container()
+    data, right = promo_filters(data, mapping, "promo_history")
+    window = right.selectbox("Период", [7, 30, 90, None], index=1, key="promo_history_window",
                              format_func=lambda days: f"{days} дней" if days else "Всё время")
     periods = promo_periods(data, today)
     if window and not periods.empty:
@@ -401,19 +427,24 @@ def show_promo_history(data, current, today):
             values[2] = metric_amount(periods["max_discount"].mean(), "%")
         if not closed.empty:
             values[3] = f"{closed['days'].mean():.1f}".replace(".", ",") + " дн."
-    metric_cards("promos", ["Действующих акций", "Завершённых акций",
-                 "Средняя максимальная скидка", "Средняя длительность завершённых"], values)
+    with kpis:
+        metric_cards("promos", ["Действующих акций", "Завершённых акций",
+                     "Средняя максимальная скидка", "Средняя длительность завершённых"], values)
     if periods.empty:
         st.info("Подтверждённых акционных периодов по выбранным фильтрам нет.")
         return
-    config = {k: LABELS[k] for k in ["supplier", "product", "sku"]}
+    details = data.sort_values(["date", "checked_at"]).drop_duplicates(KEY, keep="last")
+    periods = periods.merge(details[[*KEY, "canonical_name", "url"]], on=KEY, how="left", validate="many_to_one")
+    config = dict(canonical_name="Главный товар", supplier="Поставщик", sku="Артикул",
+                  url=st.column_config.LinkColumn("Товар"))
     for field, label in [("first", "Первое обнаружение"), ("last", "Последнее подтверждение"),
                          ("ended", "Впервые без акции")]:
         config[field] = st.column_config.DateColumn(label, format="DD.MM.YYYY")
     config.update(days="Дней", min_price=st.column_config.NumberColumn("Мин. цена"),
                   max_discount=st.column_config.NumberColumn("Макс. скидка"), status="Статус")
-    order = ["supplier", "product", "status", "first", "last", "ended", "days", "min_price", "max_discount", "sku"]
-    styled_table(periods.sort_values("first", ascending=False)[order], config, money=["min_price"], percent=["max_discount"])
+    order = ["canonical_name", *KEY, "url", "status", "first", "last", "ended", "days", "min_price", "max_discount"]
+    styled_table(periods.sort_values("first", ascending=False)[order], config, money=["min_price"], percent=["max_discount"],
+                 formats={"url": dict(zip(periods["url"], periods["product"])).get})
 
 
 def show_diagnostics(current, today, catalog):
@@ -546,15 +577,17 @@ def main():
     with comparison:
         show_comparison(data, today, mapping)
     with promos:
-        st.subheader("Действующие акции по последним наблюдениям")
-        if active.empty:
+        st.subheader("Действующие акции")
+        filtered_active, _ = promo_filters(active, mapping, "promo_active")
+        if filtered_active.empty:
             st.info("Среди последних наблюдений подтверждённых акций нет.")
         else:
-            show_table(active, ["supplier", "product", "sku", "date", "price", "regular_price", "discount_pct"])
+            show_price_table(table_prices(filtered_active), overview=True, promotions=True)
         unknown = (current["is_promo"].isna() | ~fresh).sum()
         if unknown:
             st.caption(f"Статус акции неизвестен у {unknown} товаров.")
-        show_promo_history(data, current, today)
+        st.divider()
+        show_promo_history(data, current, today, mapping)
     with status:
         diagnostics_ok = show_diagnostics(current, today, catalog)
         left, right = st.columns(2)
