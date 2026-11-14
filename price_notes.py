@@ -21,6 +21,7 @@ def find_font(explicit=None):
         Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/arial.ttf",
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
         Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
     ]
     for path in candidates:
