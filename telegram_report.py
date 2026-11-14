@@ -20,7 +20,7 @@ KYIV = ZoneInfo("Europe/Kyiv")
 DASHBOARD = "https://supplier-price-monitor-dzfqdggyymrq2sirg6aucu.streamlit.app/"
 
 
-def build_report(history, today):
+def build_report(history, today, status_counts=None):
     changes, comparable = daily_changes(history, today)
     rising = changes.loc[changes["change"].gt(0)]
     falling = changes.loc[changes["change"].lt(0)]
@@ -43,8 +43,26 @@ def build_report(history, today):
             )
         if len(changes) > 20:
             lines.append(f"Ещё изменений: {len(changes) - 20}.")
+    if status_counts is not None:
+        lines.append("Состояние последнего сбора:")
+        lines.append(f"Ошибки: {status_counts.get('error', 0)} | Нет в наличии: {status_counts.get('out_of_stock', 0)} | Без цены: {status_counts.get('price_missing', 0)}")
+        lines.append("Это текущие статусы, не новые события за сегодня.")
     lines.append(f"Подробнее: {DASHBOARD}")
     return "\n".join(lines)
+
+
+def read_status_counts(path):
+    """Count latest collection statuses; do not infer historical transitions."""
+    import csv
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    counts = {}
+    for row in rows:
+        value = row.get("status", "")
+        counts[value] = counts.get(value, 0) + 1
+    return counts
 
 
 def send_message(token, chat_id, message):
@@ -72,7 +90,8 @@ def main():
         print("Telegram notification skipped: no validated history.")
         return
     today = datetime.now(KYIV).date()
-    message = build_report(history, today)
+    counts = read_status_counts(ROOT / "data" / "collection_status.csv")
+    message = build_report(history, today, counts)
     send_message(token, chat_id, message)
     print("Telegram daily summary sent.")
 
