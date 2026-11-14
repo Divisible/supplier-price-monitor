@@ -62,6 +62,12 @@ jobs:
             data/collection_status.csv
           if-no-files-found: warn
           retention-days: 30
+      - name: Notify Telegram about today's price changes
+        if: github.ref == 'refs/heads/main' && steps.collect.outputs.all_failed != 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python telegram_report.py
       - name: Flag collection without successful observations
         if: steps.collect.outputs.all_failed == 'true'
         run: |
