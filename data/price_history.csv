@@ -296,6 +296,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-14,2026-11-14T09:33:59.201427+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-14,2026-11-14T09:32:13.112667+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,69.90,https://varus.ua/limon-biberciler-interdonato-vagovij,81.9,14.65,true
 2026-11-14,2026-11-14T09:33:05.082067+02:00,Фора,134544,"Ківі ваговий, кг",UAH,99.90,https://fora.ua/product/kivi-vagovyi-134544,109.90,9.10,true
+2026-11-14,2026-11-14T16:17:39.367378+02:00,Фора,142571,"Яблуко Гала, кг",UAH,19.90,https://fora.ua/product/yabluko-gala-142571,24.90,20.08,true
 2026-11-14,2026-11-14T09:32:52.544594+02:00,Фора,24,"Гранат, кг",UAH,149.90,https://fora.ua/product/granat-24,,0,false
 2026-11-14,2026-11-14T09:31:46.408483+02:00,Фора,32485,"Банан, кг",UAH,74.80,https://fora.ua/product/banan-32485,,0,false
 2026-11-14,2026-11-14T09:33:36.123029+02:00,Фора,32507,"Ківі кошик, шт",UAH,104.90,https://fora.ua/product/kivi-koshyk-32507,,0,false
