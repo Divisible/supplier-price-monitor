@@ -171,12 +171,9 @@ def page_rows(rows, size, key):
                           on_click=st.session_state.update, args=({key: target},))
 
             button("‹ Назад", page - 1, page == 1)
-            previous = 0
-            for n in sorted({1, count, *range(max(1, page - 1), min(count, page + 1) + 1)}):
-                if n > previous + 1:
-                    st.text("…", width="content")
+            first = max(1, min(page - 2, count - 4))
+            for n in range(first, min(count, first + 4) + 1):
                 button(str(n), n, active=n == page)
-                previous = n
             button("Вперёд ›", page + 1, page == count)
     return rows.iloc[(page - 1) * size:page * size]
 
@@ -192,13 +189,13 @@ def show_current_prices(catalog, fresh, mapping):
     search, sort, direction = st.columns([2, 1.3, 1.3])
     with search:
         entry, clear = st.columns([8, 1], vertical_alignment="bottom")
-        query = entry.text_input("Поиск по товару, поставщику или артикулу", key="overview_search",
+        query = entry.text_input("Поиск по главному товару", key="overview_search",
                                  live="300ms", on_change=st.session_state.update,
                                  args=({"overview_page": 1},)).strip()
         clear.button("×", help="Очистить поиск", on_click=st.session_state.update,
                      args=({"overview_search": "", "overview_page": 1},))
         if query:
-            fields = current[["product", "canonical_name", *KEY]].fillna("")
+            fields = current[["canonical_name"]].fillna("")
             matches = fields.apply(
                 lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
             suggestions = pd.Series(fields.to_numpy().ravel()).drop_duplicates()
@@ -209,8 +206,8 @@ def show_current_prices(catalog, fresh, mapping):
                 st.button(value, key=f"overview_suggestion_{index}", on_click=st.session_state.update,
                           args=({"overview_search": value, "overview_page": 1},))
             current = current.loc[matches.any(axis=1)]
-    field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get)
-    order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"])
+    field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get, required=True)
+    order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"], required=True)
     if current.empty:
         st.info("Ничего не найдено")
         return
@@ -294,9 +291,9 @@ def show_comparison(data, today, mapping):
     kpis = st.container()
     left, right = st.columns([2, 1])
     product_id = left.selectbox("Главный товар", list(names), format_func=names.get,
-                                on_change=st.session_state.update, args=({"compare_page": 1},))
-    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"],
-                             on_change=st.session_state.update, args=({"compare_page": 1},))
+                                on_change=st.session_state.update, args=({"compare_page": 1},), required=True)
+    period = right.selectbox("Период сравнения", ["7 дней", "30 дней", "90 дней", "Весь период"], index=1,
+                             on_change=st.session_state.update, args=({"compare_page": 1},), required=True)
     group = mapping.loc[mapping["product_id"].eq(product_id) & mapping["match_type"].ne("unmatched")]
     if group.empty:
         st.info("Для этого товара нет сопоставимых позиций.")
@@ -350,7 +347,7 @@ def show_supplier_history(rows, group, days, today):
     chart = base.mark_line(strokeWidth=2) + base.mark_circle(size=65)
     st.altair_chart(style_chart(chart), theme=None, width="stretch")
     slot = st.container()
-    page = page_rows(table.sort_index(ascending=False), 30, "compare_page")
+    page = page_rows(table.sort_index(ascending=False), 15, "compare_page")
     with slot:
         show_table(page.reset_index(), ["date", *table.columns], extra_prices=table.columns)
 
@@ -394,10 +391,12 @@ def promo_filters(data, mapping, key):
                           validate="many_to_one")
     left, middle, right = st.columns([1, 2, 1])
     supplier = left.selectbox("Поставщик", [None, *sorted(data["supplier"].unique())],
-                              format_func=lambda value: value or "Все поставщики", key=f"{key}_supplier")
+                              format_func=lambda value: value or "Все поставщики", key=f"{key}_supplier",
+                              on_change=st.session_state.update, args=({f"{key}_page": 1},), required=True)
     names = data.dropna(subset=["product_id"]).set_index("product_id")["canonical_name"].to_dict()
     item = middle.selectbox("Главный товар", [None, *names], key=f"{key}_item",
-                            format_func=lambda value: names[value] if value else "Все товары")
+                            format_func=lambda value: names[value] if value else "Все товары",
+                            on_change=st.session_state.update, args=({f"{key}_page": 1},), required=True)
     if supplier is not None:
         data = data.loc[data["supplier"].eq(supplier)]
     if item is not None:
@@ -405,12 +404,12 @@ def promo_filters(data, mapping, key):
     return data, right
 
 
-def show_promo_history(data, current, today, mapping):
+def show_promo_history(data, current, today, mapping, kpis):
     st.subheader("История промоакций")
-    kpis = st.container()
     data, right = promo_filters(data, mapping, "promo_history")
     window = right.selectbox("Период", [7, 30, 90, None], index=1, key="promo_history_window",
-                             format_func=lambda days: f"{days} дней" if days else "Всё время")
+                             format_func=lambda days: f"{days} дней" if days else "Всё время",
+                             on_change=st.session_state.update, args=({"promo_history_page": 1},), required=True)
     periods = promo_periods(data, today)
     if window and not periods.empty:
         cutoff = today - timedelta(days=window - 1)
@@ -428,7 +427,7 @@ def show_promo_history(data, current, today, mapping):
         if not closed.empty:
             values[3] = f"{closed['days'].mean():.1f}".replace(".", ",") + " дн."
     with kpis:
-        metric_cards("promos", ["Действующих акций", "Завершённых акций",
+        metric_cards("promos", ["Действующих промоакций", "Завершённых промоакций",
                      "Средняя максимальная скидка", "Средняя длительность завершённых"], values)
     if periods.empty:
         st.info("Подтверждённых акционных периодов по выбранным фильтрам нет.")
@@ -443,11 +442,15 @@ def show_promo_history(data, current, today, mapping):
     config.update(days="Дней", min_price=st.column_config.NumberColumn("Мин. цена"),
                   max_discount=st.column_config.NumberColumn("Макс. скидка"), status="Статус")
     order = ["canonical_name", *KEY, "url", "status", "first", "last", "ended", "days", "min_price", "max_discount"]
-    styled_table(periods.sort_values("first", ascending=False)[order], config, money=["min_price"], percent=["max_discount"],
-                 formats={"url": dict(zip(periods["url"], periods["product"])).get})
+    slot = st.container()
+    page = page_rows(periods.sort_values("first", ascending=False), 15, "promo_history_page")
+    with slot:
+        styled_table(page[order], config, money=["min_price"], percent=["max_discount"],
+                     formats={"url": dict(zip(page["url"], page["product"])).get})
 
 
-def show_diagnostics(current, today, catalog):
+
+def show_diagnostics(current, today, catalog, mapping, data):
     if catalog is None:
         st.warning("Каталог не удалось прочитать. Диагностика позиций недоступна.")
         return False
@@ -475,13 +478,19 @@ def show_diagnostics(current, today, catalog):
     metric_cards("quality", ["Отслеживается", "Успешно", "Ошибок",
             "Без цены", "Нет в наличии", "Устаревших цен"], [len(positions), counts.get("ok", 0),
             counts.get("error", 0), counts.get("price_missing", 0), counts.get("out_of_stock", 0), stale])
+    left, right = st.columns(2)
+    last = data["checked_at"].max() if not data.empty else None
+    left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M") if last is not None else "Нет данных")
+    right.metric("Записей истории", len(data))
     if stale:
         st.warning(f"Устаревшие цены: {stale}. Последняя успешная проверка была раньше вчерашнего дня.")
     left, right = st.columns(2)
-    supplier = left.selectbox("Поставщик", ["Все", *sorted(positions["supplier"].unique())], key="diag_supplier")
+    supplier = left.selectbox("Поставщик", ["Все", *sorted(positions["supplier"].unique())], key="diag_supplier",
+                              on_change=st.session_state.update, args=({"diag_page": 1},), required=True)
     statuses = {"Все": "Все", "ok": "Успешно", "error": "Ошибка", "price_missing": "Без цены",
                 "out_of_stock": "Нет в наличии", "Нет попытки": "Нет попытки"}
-    status = right.selectbox("Статус последней попытки", list(statuses), format_func=statuses.get, key="diag_status")
+    status = right.selectbox("Статус последней попытки", list(statuses), format_func=statuses.get, key="diag_status",
+                             on_change=st.session_state.update, args=({"diag_page": 1},), required=True)
     if supplier != "Все":
         positions = positions[positions["supplier"].eq(supplier)]
     if status != "Все":
@@ -493,15 +502,60 @@ def show_diagnostics(current, today, catalog):
     positions["status"] = positions["status"].replace(statuses)
     positions["reason"] = positions["reason"].replace("", pd.NA)
     positions["date"] = positions["date"].dt.date
-    config = dict(supplier="Поставщик", product="Товар", sku="SKU", status="Статус",
-                  checked_at=st.column_config.DatetimeColumn("Последняя попытка по Киеву", timezone="Europe/Kyiv",
-                                                            format="DD.MM.YYYY HH:mm"),
-                  price=st.column_config.NumberColumn("Последняя успешная цена"),
-                  date=st.column_config.DateColumn("Последнее успешное наблюдение", format="DD.MM.YYYY"),
-                  Свежесть="Свежесть", reason="Причина")
-    order = ["product", "supplier", "status", "checked_at", "reason", "price", "date", "Свежесть", "sku"]
-    styled_table(positions[order], config, money=["price"])
+    if mapping is None:
+        positions["canonical_name"] = pd.NA
+    else:
+        positions = positions.merge(mapping[[*KEY, "canonical_name"]], on=KEY, how="left", validate="one_to_one")
+    config = dict(canonical_name="Главный товар", supplier="Поставщик", sku="Артикул",
+                  url=st.column_config.LinkColumn("Товар"), status="Статус", reason="Причина", Свежесть="Свежесть",
+                  date=st.column_config.DateColumn("Последнее успешное наблюдение", format="DD.MM.YYYY"))
+    order = ["canonical_name", *KEY, "url", "date", "status", "reason", "Свежесть"]
+    slot = st.container()
+    page = page_rows(positions, 15, "diag_page")
+    with slot:
+        styled_table(page[order], config, formats={"url": dict(zip(page["url"], page["product"])).get})
     return path.exists()
+
+
+def daily_changes(data, today):
+    # load_history validates prices and Kyiv dates; retain the last observation per day.
+    daily = data.sort_values("checked_at").drop_duplicates([*KEY, "date"], keep="last")
+    yesterday = daily.loc[daily["date"].dt.date.eq(today - timedelta(days=1)), [*KEY, "price"]]
+    current = daily.loc[daily["date"].dt.date.eq(today)]
+    paired = current.merge(yesterday.rename(columns={"price": "previous_price"}), on=KEY, validate="one_to_one")
+    changed = paired.loc[paired["price"].ne(paired["previous_price"])].copy()
+    changed["change"] = changed["price"] - changed["previous_price"]
+    changed["change_pct"] = changed["change"] / changed["previous_price"].where(changed["previous_price"].gt(0)) * 100
+    changed["direction"] = changed["change"].map(lambda value: "Подорожание" if value > 0 else "Снижение")
+    return changed, len(paired)
+
+
+def show_daily_changes(data, mapping, today):
+    st.subheader("Изменения за сегодня")
+    changed, comparable = daily_changes(data, today)
+    if not comparable:
+        st.info("Недостаточно данных: нужны цены одного товара за сегодня и вчера по Киеву.")
+    elif changed.empty:
+        st.info("У товаров с наблюдениями за сегодня и вчера цена не изменилась.")
+    else:
+        if mapping is None:
+            changed["canonical_name"] = pd.NA
+        else:
+            changed = changed.merge(mapping[[*KEY, "canonical_name"]], on=KEY, how="left", validate="one_to_one")
+        config = dict(canonical_name="Главный товар", supplier="Поставщик", sku="Артикул",
+                      url=st.column_config.LinkColumn("Товар"),
+                      previous_price=st.column_config.NumberColumn("Цена вчера"),
+                      price=st.column_config.NumberColumn("Цена сегодня"),
+                      change=st.column_config.NumberColumn("Разница, грн"),
+                      change_pct=st.column_config.NumberColumn("Разница, %"), direction="Изменение")
+        order = ["canonical_name", *KEY, "url", "previous_price", "price", "change", "change_pct", "direction"]
+        slot = st.container()
+        page = page_rows(changed.sort_values(KEY), 15, "daily_changes_page")
+        with slot:
+            styled_table(page[order], config, money=["previous_price", "price"],
+                         formats={"url": dict(zip(page["url"], page["product"])).get})
+    st.caption("История статусов сбора не сохраняется. Текущие ошибки и отсутствие товара показаны выше; "
+               "для сравнения переходов между днями потребуется отдельное изменение хранения данных.")
 
 
 def main():
@@ -542,7 +596,7 @@ def main():
                 show_current_prices(catalog, data, mapping)
         with status:
             st.warning(error)
-            show_diagnostics(pd.DataFrame(), datetime.now(KYIV).date(), catalog)
+            show_diagnostics(pd.DataFrame(), datetime.now(KYIV).date(), catalog, mapping, data)
             st.caption("Источник — локальный CSV приложения. Состояние GitHub Actions здесь не проверяется.")
         return
 
@@ -561,10 +615,13 @@ def main():
             st.warning("Устаревшие или будущие наблюдения исключены из актуальных цен. Подробности — в «Состоянии данных».")
     with history:
         left, middle, right = st.columns([1, 2, 1])
-        supplier = left.selectbox("Поставщик", sorted(data["supplier"].unique()))
+        supplier = left.selectbox("Поставщик", sorted(data["supplier"].unique()),
+                                  on_change=st.session_state.update, args=({"history_page": 1},), required=True)
         products = current.loc[current["supplier"].eq(supplier)].set_index("sku")["product"].to_dict()
-        sku = middle.selectbox("Товар", list(products), format_func=lambda key: f"{products[key]} · {key}")
-        period = right.selectbox("Период", ["7 дней", "30 дней", "60 дней", "90 дней", "Весь период"])
+        sku = middle.selectbox("Товар", list(products), format_func=lambda key: f"{products[key]} · {key}",
+                               on_change=st.session_state.update, args=({"history_page": 1},), required=True)
+        period = right.selectbox("Период", ["7 дней", "30 дней", "60 дней", "90 дней", "Весь период"], index=1,
+                                 on_change=st.session_state.update, args=({"history_page": 1},), required=True)
         days = None if period == "Весь период" else int(period.split()[0])
         selected = filter_history(data, supplier, sku, days, today)
         if selected.empty:
@@ -573,26 +630,31 @@ def main():
             if len(selected) < 2:
                 st.info("Одно наблюдение за период. Для линии изменения цены нужно хотя бы два.")
             show_daily_chart(selected, days, today)
-            show_price_table(table_prices(selected.sort_values(["date", "checked_at"], ascending=False)))
+            slot = st.container()
+            page = page_rows(selected.sort_values(["date", "checked_at"], ascending=False), 15, "history_page")
+            with slot:
+                show_price_table(table_prices(page))
     with comparison:
         show_comparison(data, today, mapping)
     with promos:
-        st.subheader("Действующие акции")
+        promo_kpis = st.container()
+        st.subheader("Действующие промоакции")
         filtered_active, _ = promo_filters(active, mapping, "promo_active")
         if filtered_active.empty:
             st.info("Среди последних наблюдений подтверждённых акций нет.")
         else:
-            show_price_table(table_prices(filtered_active), overview=True, promotions=True)
+            slot = st.container()
+            page = page_rows(filtered_active, 15, "promo_active_page")
+            with slot:
+                show_price_table(table_prices(page), overview=True, promotions=True)
         unknown = (current["is_promo"].isna() | ~fresh).sum()
         if unknown:
             st.caption(f"Статус акции неизвестен у {unknown} товаров.")
         st.divider()
-        show_promo_history(data, current, today, mapping)
+        show_promo_history(data, current, today, mapping, promo_kpis)
     with status:
-        diagnostics_ok = show_diagnostics(current, today, catalog)
-        left, right = st.columns(2)
-        left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M"))
-        right.metric("Записей истории", len(data))
+        diagnostics_ok = show_diagnostics(current, today, catalog, mapping, data)
+        show_daily_changes(data, mapping, today)
         age = (today - last.date()).days
         if age > 1:
             st.warning(f"Последнее наблюдение старше одного календарного дня по Киеву — {age} дн.")
