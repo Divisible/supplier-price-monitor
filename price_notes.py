@@ -94,7 +94,7 @@ def collection_summary(path):
             f"Ошибки {counts[0]}   ·   Нет в наличии {counts[1]}   ·   Без цены {counts[2]}")
 
 
-def render_notes(changes, comparable, report_date, output, footer, font_path):
+def render_notes(changes, comparable, report_date, output, footer, font_path, mode=None):
     with (ROOT / ".streamlit/config.toml").open("rb") as stream:
         theme = tomllib.load(stream)["theme"]
     font = lambda size: ImageFont.truetype(font_path, size)
@@ -120,6 +120,8 @@ def render_notes(changes, comparable, report_date, output, footer, font_path):
         text(WIDTH - 48 - small.getlength(header), 48, header, small)
         text(48, 102, f"Сравнено {comparable}   ·   Изменений {len(changes)}   ·   "
              f"Подорожали {len(sides[0])}   ·   Подешевели {len(sides[1])}", small)
+        if mode is not None:
+            text(1100, 102, "Вечер · к утреннему сбору" if mode == "evening" else "Утро · к предыдущему дню", small)
         if not changes.empty:
             for side, x in enumerate((48, 816)):
                 color = theme["redTextColor" if side == 0 else "greenTextColor"]
@@ -158,6 +160,8 @@ def render_notes(changes, comparable, report_date, output, footer, font_path):
             message = "Недостаточно данных для сравнения" if not comparable else "Изменений цен нет"
             text((WIDTH - title.getlength(message)) / 2, 350, message, title)
             detail = "Нет сопоставимых наблюдений за дату отчёта и предыдущий день" if not comparable else "Цены совпадают с предыдущим днём"
+            if mode == "evening":
+                detail = "Нет сопоставимых успешных утренних и вечерних наблюдений" if not comparable else "Цены совпадают с утренним сбором"
             text((WIDTH - small.getlength(detail)) / 2, 410, detail, small)
         text(48, 819, footer, small)
         text(48, 856, "Состояние последних попыток сбора · статусы не являются новыми событиями за день", font(17), theme["grayTextColor"])

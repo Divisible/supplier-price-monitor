@@ -21,16 +21,16 @@ KYIV = ZoneInfo("Europe/Kyiv")
 DASHBOARD = "https://supplier-price-monitor-dzfqdggyymrq2sirg6aucu.streamlit.app/"
 
 
-def build_report(history, today, status_counts=None):
-    changes, comparable = daily_changes(history, today)
+def build_report(history, today, status_counts=None, comparison_data=None, mode="morning"):
+    changes, comparable, promos = comparison_data if comparison_data is not None else (*daily_changes(history, today), [])
     rising = changes.loc[changes["change"].gt(0)]
     falling = changes.loc[changes["change"].lt(0)]
     lines = [
-        f"SPM — изменения за {today:%d.%m.%Y} (Киев)",
+        f"SPM — {'утро: к предыдущему дню' if mode == 'morning' else 'вечер: к утреннему сбору'} · {today:%d.%m.%Y} (Киев)",
         f"Подорожали: {len(rising)} | Подешевели: {len(falling)}",
     ]
     if not comparable:
-        lines.append("Нет сопоставимых цен за сегодня и вчера.")
+        lines.append("Нет сопоставимых цен за сегодня и вчера." if mode == "morning" else "Нет сопоставимых успешных утренних и вечерних наблюдений.")
     elif changes.empty:
         lines.append("Сопоставимые цены не изменились.")
     else:
@@ -44,6 +44,7 @@ def build_report(history, today, status_counts=None):
             )
         if len(changes) > 20:
             lines.append(f"Ещё изменений: {len(changes) - 20}.")
+    lines.extend(promos)
     if status_counts is not None:
         lines.append("Состояние последнего сбора:")
         lines.append(f"Ошибки: {status_counts.get('error', 0)} | Нет в наличии: {status_counts.get('out_of_stock', 0)} | Без цены: {status_counts.get('price_missing', 0)}")
@@ -122,12 +123,12 @@ def send_images(token, chat_id, paths, caption):
         telegram_request(token, method, b"".join(parts), f"multipart/form-data; boundary={boundary}")
 
 
-def generate_images(history, today, output):
+def generate_images(history, today, output, comparison_data=None, mode="morning"):
     # Keep rendering imports inside the fallback boundary, including Pillow.
     from price_notes import collection_summary, find_font, render_notes
-    changes, comparable = daily_changes(history, today)
+    changes, comparable = comparison_data[:2] if comparison_data is not None else daily_changes(history, today)
     footer = collection_summary(ROOT / "data" / "collection_status.csv")
-    return render_notes(changes, comparable, today, output, footer, find_font())
+    return render_notes(changes, comparable, today, output, footer, find_font(), mode=mode)
 
 
 def main():
@@ -136,17 +137,47 @@ def main():
     if not token or not chat_id:
         print("Telegram notification skipped: credentials not configured.")
         return
-    history = load_history(ROOT / "data" / "price_history.csv")
-    if history.empty:
+    history_path = ROOT / "data" / "price_history.csv"
+    history = load_history(history_path) if history_path.exists() else pd.DataFrame()
+    snapshot_path = os.environ.get("SPM_CURRENT_SNAPSHOT")
+    if history.empty and not snapshot_path:
         print("Telegram notification skipped: no validated history.")
         return
     today = datetime.now(KYIV).date()
     counts = read_status_counts(ROOT / "data" / "collection_status.csv")
-    message = build_report(history, today, counts)
+    comparison_data, mode = None, "morning"
+    if snapshot_path:
+        from collection_run import comparison
+        current = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
+        if current["date"] != today.isoformat():
+            print("Telegram notification skipped: snapshot is not from today.")
+            return
+        mode = current["mode"]
+        baseline = Path(os.environ.get("SPM_MORNING_SNAPSHOT", "missing-snapshot.json"))
+        try:
+            morning = json.loads(baseline.read_text(encoding="utf-8")) if baseline.is_file() else None
+        except (OSError, ValueError):
+            morning = None
+            print("Morning snapshot unreadable; intraday comparison unavailable.")
+        comparison_data = comparison(history, current, morning)
+        counts = {}
+        for row in current["statuses"]:
+            counts[row["status"]] = counts.get(row["status"], 0) + 1
+    message = build_report(history, today, counts, comparison_data, mode)
     caption = "\n".join([*message.splitlines()[:2], DASHBOARD])
+    if comparison_data is not None:
+        # Caption is compact; full promotion details remain in the text fallback.
+        extras = [*comparison_data[2], f"Сбор: ошибок {counts.get('error', 0)}, нет в наличии {counts.get('out_of_stock', 0)}, без цены {counts.get('price_missing', 0)}"]
+        caption = "\n".join([*message.splitlines()[:2], extras.pop(), DASHBOARD])
+        for index, line in enumerate(extras):
+            if len((caption + "\n" + line).encode("utf-16-le")) // 2 > 900:
+                caption += f"\nЕщё строк о промо/сравнении: {len(extras) - index}. Подробнее в Dashboard."
+                break
+            caption += "\n" + line
     try:
         with TemporaryDirectory(prefix="spm-price-notes-") as output:
-            paths = generate_images(history, today, Path(output))
+            paths = (generate_images(history, today, Path(output), comparison_data, mode)
+                     if comparison_data is not None else generate_images(history, today, Path(output)))
             send_images(token, chat_id, paths, caption)
     except Exception:
         print("PNG report failed or delivery unconfirmed; sending text fallback without retrying images.")
