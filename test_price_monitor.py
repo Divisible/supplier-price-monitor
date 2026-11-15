@@ -125,6 +125,37 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(monitor.HISTORY.read_bytes(), first)
         self.assertEqual(len(monitor.load_history()), 6)
 
+    def test_twice_daily_updates_keep_history_and_schema(self):
+        self.collect()
+        morning = monitor.load_history()
+        fields = list(morning[0])
+        prices = dict(price="70.00", regular_price="", discount_pct="0", is_promo="false")
+        clock = MagicMock()
+        clock.fromisoformat.side_effect = datetime.fromisoformat
+        with patch.object(monitor, "sync_playwright", MagicMock()), \
+                patch.object(monitor, "collect_fora", return_value=prices) as collect, \
+                patch.object(monitor, "datetime", clock):
+            for hour, update in ((17, {}), (18, {"price": "60.00"}),
+                                 (19, {"regular_price": "75.00", "discount_pct": "20.00", "is_promo": "true"})):
+                prices.update(update)
+                clock.now.return_value = datetime.fromisoformat(f"2026-11-06T{hour}:00:00+02:00")
+                monitor.main()
+                saved = monitor.load_history()
+                self.assertEqual(saved[:3], morning[:3])
+                self.assertEqual(len(saved), 6)
+                self.assertEqual(list(saved[0]), fields)
+                self.assertEqual(len({monitor.history_key(r) for r in saved}), 6)
+                self.assertTrue(all(all(r[k] == v for k, v in prices.items()) for r in saved[3:]))
+            before = monitor.HISTORY.read_bytes()
+            clock.now.return_value = datetime.fromisoformat("2026-11-06T20:00:00+02:00")
+            monitor.main()  # An unchanged later success must preserve checked_at too.
+            self.assertEqual(monitor.HISTORY.read_bytes(), before)
+            collect.side_effect = TimeoutError()
+            with self.assertRaises(SystemExit) as error:
+                monitor.main()
+            self.assertEqual(error.exception.code, 3)
+            self.assertEqual(monitor.HISTORY.read_bytes(), before)
+
     def test_excel(self):
         self.collect()
         wb = load_workbook(monitor.OUTPUT)
