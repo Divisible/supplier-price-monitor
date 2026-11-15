@@ -80,7 +80,7 @@ STATUS_COLORS = {"Активна": "#15803D", "Завершена": "#475569", "
 def change_color(value):
     if pd.isna(value) or value == 0:
         return "color: #64748B"
-    return "color: #B91C1C" if value > 0 else "color: #15803D"
+    return "color: #15803D" if value > 0 else "color: #B91C1C"
 
 
 def styled_table(data, config, *, money=(), percent=(), formats=None, height="auto"):
@@ -94,9 +94,13 @@ def styled_table(data, config, *, money=(), percent=(), formats=None, height="au
         if field in data:
             formats[field] = lambda v, u=unit: metric_amount(v, u, signed=True)
     style = data.style.format(formats, na_rep="—")
-    for field in ("change", "change_pct", "promo_difference"):
+    for field in ("change", "change_pct"):
         if field in data:
             style = style.map(change_color, subset=[field])
+    if "promo_difference" in data:
+        # A discount versus regular price is not a temporal price change.
+        style = style.map(lambda v: "color: #64748B" if pd.isna(v) or v == 0 else
+                          "color: #15803D" if v < 0 else "color: #B91C1C", subset=["promo_difference"])
     for field in ("status", "Свежесть", "Цена среди свежих"):
         if field in data:
             style = style.map(lambda v: f"color: {STATUS_COLORS.get(v, '#64748B')}", subset=[field])
