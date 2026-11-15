@@ -198,13 +198,6 @@ def show_current_prices(catalog, fresh, mapping):
             fields = current[["canonical_name"]].fillna("")
             matches = fields.apply(
                 lambda col: col.str.casefold().str.contains(query.casefold(), regex=False, na=False))
-            suggestions = pd.Series(fields.to_numpy().ravel()).drop_duplicates()
-            suggestions = suggestions[suggestions.str.casefold().str.contains(query.casefold(), regex=False)]
-            suggestions = sorted(suggestions, key=lambda value: (
-                value.casefold() != query.casefold(), not value.casefold().startswith(query.casefold()), value.casefold()))
-            for index, value in enumerate(suggestions[:7]):
-                st.button(value, key=f"overview_suggestion_{index}", on_click=st.session_state.update,
-                          args=({"overview_search": value, "overview_page": 1},))
             current = current.loc[matches.any(axis=1)]
     field = sort.selectbox("Сортировать по", list(PRICE_LABELS), index=1, format_func=PRICE_LABELS.get, required=True)
     order = direction.selectbox("Порядок", ["По возрастанию", "По убыванию"], required=True)

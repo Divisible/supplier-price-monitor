@@ -124,7 +124,7 @@ def render_notes(changes, comparable, report_date, output, footer, font_path, mo
             text(1100, 102, "Вечер · к утреннему сбору" if mode == "evening" else "Утро · к предыдущему дню", small)
         if not changes.empty:
             for side, x in enumerate((48, 816)):
-                color = theme["redTextColor" if side == 0 else "greenTextColor"]
+                color = theme["greenTextColor" if side == 0 else "redTextColor"]
                 draw.rounded_rectangle((x, 150, x + 736, 792), radius=18, fill=theme["secondaryBackgroundColor"])
                 text(x + 26, 173, "PRICE NERFS" if side == 0 else "PRICE BUFFS", font(27), color)
                 text(x + 266, 180, "/ ПОДОРОЖАЛИ" if side == 0 else "/ ПОДЕШЕВЕЛИ", small, color)

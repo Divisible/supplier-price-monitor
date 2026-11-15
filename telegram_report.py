@@ -27,7 +27,7 @@ def build_report(history, today, status_counts=None, comparison_data=None, mode=
     falling = changes.loc[changes["change"].lt(0)]
     lines = [
         f"SPM — {'утро: к предыдущему дню' if mode == 'morning' else 'вечер: к утреннему сбору'} · {today:%d.%m.%Y} (Киев)",
-        f"Подорожали: {len(rising)} | Подешевели: {len(falling)}",
+        f"🟢 Подорожали: {len(rising)} | 🔴 Подешевели: {len(falling)}",
     ]
     if not comparable:
         lines.append("Нет сопоставимых цен за сегодня и вчера." if mode == "morning" else "Нет сопоставимых успешных утренних и вечерних наблюдений.")
@@ -36,7 +36,7 @@ def build_report(history, today, status_counts=None, comparison_data=None, mode=
     else:
         # Keep Telegram messages short; full details remain in the Dashboard.
         for row in changes.sort_values("change_pct", key=lambda s: s.abs(), ascending=False).head(20).itertuples():
-            arrow = "↑" if row.change > 0 else "↓"
+            arrow = "🟢 ↑" if row.change > 0 else "🔴 ↓"
             lines.append(
                 f"{arrow} {row.product} · {row.supplier}: "
                 f"{row.previous_price:.2f} → {row.price:.2f} грн "
