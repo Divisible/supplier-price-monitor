@@ -10,6 +10,7 @@ import re
 from contextlib import ExitStack
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from email.utils import format_datetime, parsedate_to_datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
@@ -212,6 +213,11 @@ def collect_fora(page, product):
     if not response or response.status != 200:
         raise ForaCardError("HTTP_ERROR")
     title = page.title().casefold()
+    error_titles = {"404 - сторінку не знайдено - фора", "404 – інтернет-магазин фора"}
+    if (title.strip() in error_titles
+            and [heading.strip() for heading in page.locator("h1").all_text_contents()] == ["4", "4"]
+            and not page.get_by_text(sku, exact=True).count()):
+        raise ForaCardError("PRODUCT_PAGE_NOT_FOUND")
     if product["product"].split(",")[0].casefold() not in title:
         raise ForaCardError("PRODUCT_TITLE_MISMATCH")
     # Scope extraction to the product detail section, never site-wide
@@ -337,6 +343,21 @@ def collect_atb(product):
     return parse_atb_prices(fetch_html(product["url"]), product)
 
 
+def atb_http_reason(error):
+    reason = f"HTTP {error.code}; stage=FETCH_HTML"
+    retry = (error.headers.get("Retry-After", "") if error.headers else "").strip()
+    if re.fullmatch(r"[0-9]{1,10}", retry):
+        return f"{reason}; retry_after_seconds={int(retry)}"
+    if retry and len(retry) <= 64:
+        try:
+            timestamp = parsedate_to_datetime(retry)
+            if timestamp.tzinfo is not None:
+                return f"{reason}; retry_after_date={format_datetime(timestamp)}"
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return reason
+
+
 def main():
     with (ROOT / "products.csv").open(encoding="utf-8-sig", newline="") as stream:
         products = list(csv.DictReader(stream))
@@ -374,7 +395,8 @@ def main():
             except ForaCardError as exc:
                 status, reason = "error", str(exc)
             except HTTPError as exc:
-                status, reason = "error", f"HTTP {exc.code}"
+                status = "error"
+                reason = atb_http_reason(exc) if supplier == "АТБ" else f"HTTP {exc.code}"
             except (URLError, TimeoutError):
                 status, reason = "error", "Ошибка соединения или истекло время ожидания."
             except Exception as exc:
