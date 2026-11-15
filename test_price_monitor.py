@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 
 # Browser/network are mocked; production parsing and persistence run unchanged.
 sys.modules.setdefault("playwright.sync_api", types.SimpleNamespace(sync_playwright=MagicMock()))
@@ -62,6 +63,27 @@ class PromotionTests(unittest.TestCase):
     def test_normal(self):
         self.assertEqual(monitor.parse_product_prices(NORMAL, "32550"),
                          dict(price="79.90", regular_price="", discount_pct="0", is_promo="false"))
+
+    def test_atb_http_diagnostic_persistence(self):
+        product = dict(self.old[0], supplier="АТБ")
+        with (monitor.ROOT / "products.csv").open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=monitor.FIELDS)
+            writer.writeheader()
+            writer.writerow(product)
+        before = monitor.HISTORY.read_bytes()
+        error = HTTPError("https://example.com/?token=secret", 403, "secret", {"Retry-After": "120", "Set-Cookie": "secret"}, None)
+        with patch.object(monitor, "urlopen", side_effect=error) as request, \
+                patch.object(monitor, "parse_atb_prices") as parse:
+            with self.assertRaises(SystemExit) as exit_code:
+                monitor.main()
+        self.assertEqual(exit_code.exception.code, 3)
+        request.assert_called_once()
+        parse.assert_not_called()
+        self.assertEqual(before, monitor.HISTORY.read_bytes())
+        with monitor.HISTORY.with_name("collection_status.csv").open(encoding="utf-8") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(rows[0]["status"], "error")
+        self.assertEqual(rows[0]["reason"], "HTTP 403; stage=FETCH_HTML; retry_after_seconds=120")
 
     def test_fora_unavailable_before_sku(self):
         card = "Яблуко Ред Чіф, кг\nнемає в наявності\nАртикул:\n593870\nкг\n29\n90 грн\nХОЧУ ЗАМОВИТИ"
@@ -154,6 +176,58 @@ class AtbTests(unittest.TestCase):
                               ('product-price--sale', '')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 monitor.parse_atb_prices(self.html.replace(before, after), self.product)
+
+
+class CollectorDiagnosticTests(unittest.TestCase):
+    def page(self, title="Лимон, кг", headings=None, sku_count=1, details=NORMAL):
+        page = MagicMock()
+        page.goto.return_value.status = 200
+        page.title.return_value = title
+        page.locator.return_value.all_text_contents.return_value = headings or ["Лимон, кг"]
+        page.locator.return_value.first.evaluate.return_value = details
+        page.get_by_text.return_value.count.return_value = sku_count
+        return page
+
+    product = dict(sku="32550", product="Лимон, кг", url="https://fora.ua/product/lymon-32550")
+
+    def test_working_card(self):
+        self.assertEqual(monitor.collect_fora(self.page(), self.product)["price"], "79.90")
+
+    def test_confirmed_soft_404(self):
+        for title in ["404 - Сторінку не знайдено - Фора", "404 – інтернет-магазин Фора"]:
+            page = self.page(title, ["4", "4"], 0)
+            with self.subTest(title=title), self.assertRaisesRegex(monitor.ForaCardError, "^PRODUCT_PAGE_NOT_FOUND$"):
+                monitor.collect_fora(page, self.product)
+            page.locator.return_value.first.evaluate.assert_not_called()
+
+    def test_incomplete_404_evidence_keeps_title_validation(self):
+        for title, headings, count in [("404 – інтернет-магазин Фора", ["Лимон"], 0),
+                                       ("404 – інтернет-магазин Фора", ["4", "4"], 1),
+                                       ("Інший товар 404", ["4", "4"], 0)]:
+            with self.subTest(title=title, headings=headings, count=count):
+                with self.assertRaisesRegex(monitor.ForaCardError, "^PRODUCT_TITLE_MISMATCH$"):
+                    monitor.collect_fora(self.page(title, headings, count), self.product)
+
+    def test_foreign_sku_and_wrong_unit(self):
+        for details, reason in [(NORMAL.replace("32550", "99999"), "SKU_NOT_FOUND"),
+                                 (NORMAL.replace("\nкг\n", "\nшт\n"), "UNIT_MISMATCH")]:
+            with self.subTest(reason=reason), self.assertRaisesRegex(monitor.ForaCardError, f"^{reason}$"):
+                monitor.collect_fora(self.page(details=details), self.product)
+
+    def test_out_of_stock_card(self):
+        details = "Лимон, кг\nнемає в наявності\nАртикул:\n32550\nкг"
+        with self.assertRaises(monitor.OutOfStock):
+            monitor.collect_fora(self.page(details=details), self.product)
+
+    def test_retry_after_allowlist(self):
+        for value, suffix in [("120", "; retry_after_seconds=120"),
+                              ("Sun, 15 Nov 2026 12:00:00 GMT", "; retry_after_date=Sun, 15 Nov 2026 12:00:00 +0000"),
+                              ("secret\r\nAuthorization: token", ""), ("", "")]:
+            error = HTTPError("https://example.com/secret", 403, "secret", {"Retry-After": value, "Set-Cookie": "secret"}, None)
+            with self.subTest(value=value):
+                self.assertEqual(monitor.atb_http_reason(error), "HTTP 403; stage=FETCH_HTML" + suffix)
+        error = HTTPError("https://example.com/secret", 403, "secret", None, None)
+        self.assertEqual(monitor.atb_http_reason(error), "HTTP 403; stage=FETCH_HTML")
 
 
 if __name__ == "__main__":
