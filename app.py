@@ -443,6 +443,21 @@ def show_promo_history(data, current, today, mapping, kpis):
 
 
 
+def diagnostic_summary(positions):
+    """Aggregate catalog positions joined to diagnostics, never price history."""
+    def summary(supplier, rows):
+        statuses = rows["status"].fillna("Нет попытки")
+        return dict(supplier=supplier, success=f"{statuses.eq('ok').sum()}/{len(rows)}",
+                    errors=int((~statuses.isin(["ok", "out_of_stock", "Нет попытки"])).sum()),
+                    unavailable=int(statuses.eq("out_of_stock").sum()),
+                    checked_at=pd.to_datetime(rows["checked_at"], utc=True).max())
+    rows = [summary(supplier, group) for supplier, group in positions.groupby("supplier", sort=True)]
+    rows.append(summary("Всего", positions))
+    result = pd.DataFrame(rows)
+    result["checked_at"] = pd.to_datetime(result["checked_at"], utc=True).dt.tz_convert(KYIV)
+    return result
+
+
 def show_diagnostics(current, today, catalog, mapping, data):
     if catalog is None:
         st.warning("Каталог не удалось прочитать. Диагностика позиций недоступна.")
@@ -468,13 +483,17 @@ def show_diagnostics(current, today, catalog, mapping, data):
     positions["status"] = positions["status"].fillna("Нет попытки")
     counts = positions["status"].value_counts()
     stale = positions["Свежесть"].eq("Устарела").sum()
-    metric_cards("quality", ["Отслеживается", "Успешно", "Ошибок",
-            "Без цены", "Нет в наличии", "Устаревших цен"], [len(positions), counts.get("ok", 0),
-            counts.get("error", 0), counts.get("price_missing", 0), counts.get("out_of_stock", 0), stale])
-    left, right = st.columns(2)
-    last = data["checked_at"].max() if not data.empty else None
-    left.metric("Последнее наблюдение по Киеву", last.strftime("%d.%m.%Y %H:%M") if last is not None else "Нет данных")
-    right.metric("Записей истории", len(data))
+    summary = diagnostic_summary(positions)
+    last = summary.iloc[-1]["checked_at"]
+    last_label = last.strftime("%d.%m.%Y %H:%M") if pd.notna(last) else "Нет данных"
+    st.caption(f"Последний сбор по Киеву: {last_label} · Записей истории: {len(data)}")
+    styled_table(summary, dict(supplier="Поставщик", success="Успешно (X/Y)",
+                 errors=st.column_config.NumberColumn("Ошибки", help="Ошибки сбора, отсутствие цены и неизвестные статусы. Без попытки не включаются."),
+                 unavailable="Нет в наличии", checked_at=st.column_config.DatetimeColumn(
+                     "Последняя проверка", format="DD.MM.YYYY HH:mm", timezone="Europe/Kyiv")))
+    unknown = (~positions["status"].isin(["ok", "error", "price_missing", "out_of_stock", "Нет попытки"])).sum()
+    st.caption(f"В ошибках: без цены — {counts.get('price_missing', 0)}, неизвестный статус — {unknown}. "
+               f"Без попытки — {counts.get('Нет попытки', 0)}. X/Y — успешные проверки / позиции каталога.")
     if stale:
         st.warning(f"Устаревшие цены: {stale}. Последняя успешная проверка была раньше вчерашнего дня.")
     left, right = st.columns(2)
