@@ -53,6 +53,9 @@ def metric_cards(key, labels, values):
 def dashboard_layout():
     # Scope responsive grid rules to containers explicitly named by this app.
     st.html("""<style>
+    [data-testid="stAppViewContainer"] [data-testid="stWidgetLabelRequired"] {
+        display:none;
+    }
     :is(.st-key-cards_overview,.st-key-cards_compare,.st-key-cards_promos,.st-key-cards_quality) {
         display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.75rem;
     }

@@ -1,5 +1,6 @@
 """Targeted promotion/history regressions; collection uses recorded page text."""
 import csv
+import json
 import sys
 import tempfile
 import types
@@ -259,6 +260,79 @@ class CollectorDiagnosticTests(unittest.TestCase):
                 self.assertEqual(monitor.atb_http_reason(error), "HTTP 403; stage=FETCH_HTML" + suffix)
         error = HTTPError("https://example.com/secret", 403, "secret", None, None)
         self.assertEqual(monitor.atb_http_reason(error), "HTTP 403; stage=FETCH_HTML")
+
+
+class VarusWhitespaceTests(unittest.TestCase):
+    def setUp(self):
+        self.product = dict(supplier="Варус", sku="128935", product="Хурма Піраміда вагова, кг",
+                            url="https://varus.ua/hurma-vag", currency="UAH")
+        self.item = dict(sku="128935", name="Хурма Піраміда вагова ", unit="kg",
+                         stock={"is_in_stock": True}, final_price="149.9", regular_price="149.9")
+        self.route = "/kyiv/hurma-vag"
+        self.offer = dict(price="149.9", priceCurrency="UAH", availability="https://schema.org/InStock")
+
+    def collect(self):
+        state = dict(route=dict(path=self.route), product=dict(current=self.item))
+        schema = {"@type": "Product", "sku": self.product["sku"], "offers": self.offer}
+        html = 'window.__INITIAL_STATE__=' + json.dumps(state) + ';<script type="application/ld+json">' + json.dumps(schema) + '</script>'
+        with patch.object(monitor, "fetch_html", return_value=html) as fetch:
+            result = monitor.collect_varus(self.product)
+        fetch.assert_called_once_with("https://varus.ua/kyiv/hurma-vag")
+        return result
+
+    def test_confirmed_trailing_space_and_normal_price(self):
+        self.assertEqual(self.collect(), dict(price="149.90", regular_price="", discount_pct="0", is_promo="false"))
+        self.item["name"] = self.item["name"].strip()
+        self.assertEqual(self.collect()["price"], "149.90")
+
+    def test_promotion(self):
+        self.item.update(final_price="100.00", regular_price="125.00")
+        self.offer["price"] = "100.00"
+        self.assertEqual(self.collect(), dict(price="100.00", regular_price="125.00", discount_pct="20.00", is_promo="true"))
+
+    def test_identity_and_unit_stay_strict(self):
+        for key, value in (("name", "Хурма Джиро вагова "), ("name", " Хурма Піраміда вагова"),
+                           ("sku", "999"), ("unit", "pc")):
+            old = self.item[key]
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                self.item[key] = value
+                self.collect()
+            self.item[key] = old
+        self.route = "/lviv/hurma-vag"
+        with self.assertRaises(ValueError):
+            self.collect()
+
+    def test_other_sku_validation_unchanged(self):
+        self.product["sku"] = self.item["sku"] = "2573109"
+        self.product["product"] = "Лимон Мейер ваговий, кг"
+        self.item["name"] = "Лимон Мейер ваговий"
+        self.assertEqual(self.collect()["price"], "149.90")
+        self.item["name"] += " "
+        with self.assertRaises(ValueError):
+            self.collect()
+
+    def test_stock_and_unknown_are_distinct(self):
+        self.item["stock"]["is_in_stock"] = False
+        with self.assertRaises(monitor.OutOfStock):
+            self.collect()
+        self.item["stock"]["is_in_stock"] = None
+        with self.assertRaises(ValueError) as error:
+            self.collect()
+        self.assertNotIsInstance(error.exception, monitor.OutOfStock)
+
+    def test_missing_zero_inconsistent_price_and_request_failure(self):
+        for price in (None, "0", "99.99"):
+            self.item["final_price"] = price
+            if price == "0":
+                self.offer["price"] = "0"
+            with self.subTest(price=price), self.assertRaises(monitor.PriceMissing):
+                self.collect()
+        with patch.object(monitor, "fetch_html", side_effect=TimeoutError()):
+            with self.assertRaises(TimeoutError):
+                monitor.collect_varus(self.product)
+        with patch.object(monitor, "fetch_html", return_value="<html>No product state</html>"):
+            with self.assertRaisesRegex(ValueError, "Missing VARUS product state"):
+                monitor.collect_varus(self.product)
 
 
 if __name__ == "__main__":
