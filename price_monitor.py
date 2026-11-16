@@ -307,8 +307,12 @@ def collect_varus(product):
     state, _ = json.JSONDecoder(parse_float=Decimal).raw_decode(html.split(marker, 1)[1].lstrip())
     item = state["product"]["current"]
     expected_title, expected_unit = catalog_title_and_unit(product)
+    actual_title = item["name"]
+    if product["sku"] == "128935":
+        # This card's confirmed JSON name contains a trailing space.
+        actual_title = actual_title.rstrip()
     if (state["route"]["path"].rstrip("/") != f"/kyiv/{slug}"
-            or str(item["sku"]) != product["sku"] or item["name"] != expected_title
+            or str(item["sku"]) != product["sku"] or actual_title != expected_title
             or item["unit"] != {"кг": "kg", "шт": "pc"}[expected_unit]):
         raise ValueError("VARUS city, product, unit or availability mismatch")
     if item["stock"]["is_in_stock"] is False:
