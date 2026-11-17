@@ -438,7 +438,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-17,2026-11-17T09:34:19.537974+02:00,АТБ,95731,"Клементин 1 гат, кг",UAH,99.95,https://www.atbmarket.com/product/klementin-1-gat,,0,false
 2026-11-17,2026-11-17T09:32:25.318279+02:00,Варус,127622,Банан ваговий,UAH,79.90,https://varus.ua/banan-vag,,0,false
 2026-11-17,2026-11-17T09:32:22.747695+02:00,Варус,127797,Апельсин ваговий,UAH,79.90,https://varus.ua/apelsin-vag,94.9,15.81,true
-2026-11-17,2026-11-17T09:34:00.657796+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,89.90,https://varus.ua/greypfrut-vag,,0,false
+2026-11-17,2026-11-17T21:30:44.025544+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,84.90,https://varus.ua/greypfrut-vag,,0,false
 2026-11-17,2026-11-17T09:34:02.296877+02:00,Варус,127810,"Помело вагове, кг",UAH,99.90,https://varus.ua/pomelo-vag,109.9,9.10,true
 2026-11-17,2026-11-17T09:34:26.497496+02:00,Варус,128855,"Світі вагове, кг",UAH,139.90,https://varus.ua/sviti-vag,,0,false
 2026-11-17,2026-11-17T09:34:04.650770+02:00,Варус,128915,"Гранат ваговий, кг",UAH,119.90,https://varus.ua/granat-vag,,0,false
@@ -454,8 +454,10 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-17,2026-11-17T09:33:57.868491+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,79.90,https://varus.ua/mandarin-vagovij2,,0,false
 2026-11-17,2026-11-17T09:34:16.278840+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-17,2026-11-17T09:32:19.853460+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,69.90,https://varus.ua/limon-biberciler-interdonato-vagovij,81.9,14.65,true
+2026-11-17,2026-11-17T21:31:19.169179+02:00,Фора,1009377,"Хурма Джиро, кг",UAH,79.90,https://fora.ua/product/khurma-dzhyro-1009377,114.90,30.46,true
 2026-11-17,2026-11-17T09:33:14.881230+02:00,Фора,134544,"Ківі ваговий, кг",UAH,99.90,https://fora.ua/product/kivi-vagovyi-134544,109.90,9.10,true
 2026-11-17,2026-11-17T09:33:27.390250+02:00,Фора,142571,"Яблуко Гала, кг",UAH,19.90,https://fora.ua/product/yabluko-gala-142571,24.90,20.08,true
+2026-11-17,2026-11-17T21:29:40.327576+02:00,Фора,144184,"Лайм, кг",UAH,339.90,https://fora.ua/product/laim-144184,,0,false
 2026-11-17,2026-11-17T09:33:02.378276+02:00,Фора,24,"Гранат, кг",UAH,149.90,https://fora.ua/product/granat-24,,0,false
 2026-11-17,2026-11-17T09:31:53.659469+02:00,Фора,32485,"Банан, кг",UAH,79.80,https://fora.ua/product/banan-32485,,0,false
 2026-11-17,2026-11-17T09:33:46.145289+02:00,Фора,32507,"Ківі кошик, шт",UAH,104.90,https://fora.ua/product/kivi-koshyk-32507,,0,false
