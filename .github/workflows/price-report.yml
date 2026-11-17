@@ -1,6 +1,21 @@
 name: Daily supplier price report
+run-name: "SPM collect | ${{ github.event_name == 'schedule' && (github.event.schedule == '30 9 * * *' && 'morning' || 'evening') || inputs.period }} | ${{ inputs.target_date || 'scheduled' }}"
 on:
   workflow_dispatch:
+    inputs:
+      period:
+        description: Target Kyiv period (never inferred from execution time)
+        type: choice
+        options: [morning, evening]
+        required: true
+      target_date:
+        description: Target Kyiv date (YYYY-MM-DD)
+        type: string
+        required: true
+      reserve_request:
+        description: Watchdog claim ID; leave empty for a manual collection
+        type: string
+        default: ''
   schedule:
     - cron: '30 9 * * *'
       timezone: Europe/Kyiv
@@ -21,7 +36,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     outputs:
-      collected: ${{ steps.slot.outputs.run }}
+      collected: ${{ steps.result.outputs.state == 'completed' }}
+      collection_state: ${{ steps.result.outputs.state }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +61,11 @@ jobs:
         env:
           RUN_CREATED_AT: ${{ steps.run.outputs.created_at }}
           RUN_SCHEDULE: ${{ github.event.schedule }}
+          REQUESTED_PERIOD: ${{ inputs.period }}
+          TARGET_DATE: ${{ inputs.target_date }}
+          RESERVE_REQUEST: ${{ inputs.reserve_request }}
+          SPM_GUARD: ${{ github.ref == 'refs/heads/main' }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: python collection_run.py prepare --work "$RUNNER_TEMP/spm-run"
       # Restore these CSVs only with writers stopped, after checking later runs.
       # A failed backup upload stops collection before any history is written.
@@ -65,12 +86,15 @@ jobs:
           if [[ "$code" == 3 ]]; then
             echo "all_failed=true" >> "$GITHUB_OUTPUT"
           else
+            if [[ "$code" == 0 ]]; then echo "succeeded=true" >> "$GITHUB_OUTPUT"; fi
             exit "$code"
           fi
       - name: Validate history boundaries and capture this collection
+        id: capture
         if: steps.slot.outputs.run == 'true'
         run: python collection_run.py capture --work "$RUNNER_TEMP/spm-run"
       - name: Persist validated observations and diagnostics
+        id: persist
         if: steps.slot.outputs.run == 'true'
         env:
           BRANCH: ${{ github.ref_name }}
@@ -86,6 +110,7 @@ jobs:
             git push origin "HEAD:refs/heads/$BRANCH"
           fi
       - name: Preserve immutable morning snapshot
+        id: snapshot
         if: steps.slot.outputs.run == 'true' && steps.slot.outputs.mode == 'morning'
         uses: actions/upload-artifact@v4
         with:
@@ -93,6 +118,30 @@ jobs:
           path: ${{ runner.temp }}/spm-run/current/snapshot.json
           if-no-files-found: error
           retention-days: 7
+      - name: Confirm successful collection
+        id: confirmed
+        if: steps.collect.outputs.succeeded == 'true' && steps.capture.outcome == 'success' && steps.persist.outcome == 'success' && (steps.slot.outputs.mode != 'morning' || steps.snapshot.outcome == 'success')
+        run: echo "Real collection, validation and persistence completed."
+      - name: Record completed collection
+        id: completed
+        if: github.ref == 'refs/heads/main' && steps.confirmed.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scheduler_guard.py complete --work "$RUNNER_TEMP/spm-run"
+      - name: Report collection outcome
+        id: result
+        if: always()
+        env:
+          CONFIRMED: ${{ steps.confirmed.outcome }}
+          SLOT_OUTCOME: ${{ steps.slot.outcome }}
+          ALLOWED: ${{ steps.slot.outputs.run }}
+        run: |
+          state=failed
+          if [[ "$CONFIRMED" == success ]]; then state=completed
+          elif [[ "$SLOT_OUTCOME" == success && "$ALLOWED" == false ]]; then state=skipped
+          fi
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "Collection: $state" >> "$GITHUB_STEP_SUMMARY"
       - name: Find latest same-day morning snapshot
         id: morning
         continue-on-error: true
