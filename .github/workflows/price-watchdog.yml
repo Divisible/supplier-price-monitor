@@ -1,0 +1,35 @@
+name: SPM collection watchdog
+run-name: "SPM check | ${{ inputs.period }}"
+on:
+  workflow_dispatch:
+    inputs:
+      period:
+        description: Target Kyiv period
+        type: choice
+        options: [morning, evening]
+        required: true
+
+# External PAT only needs Actions:write. This job uses its own short-lived token.
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: spm-watchdog-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check actual collection and request one reserve if absent
+        env:
+          REQUESTED_PERIOD: ${{ inputs.period }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scheduler_guard.py check

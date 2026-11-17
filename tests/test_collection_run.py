@@ -53,7 +53,7 @@ class RunTests(unittest.TestCase):
                 self.assertEqual(run.run_slot(cron, now, now + timedelta(minutes=45)), (mode, True))
         self.assertEqual(run.run_slot("30 9 * * *", stamp("10"), stamp("17")), ("morning", False))
         self.assertFalse(run.run_slot("0 17 * * *", stamp("17"), stamp("17", "2026-11-16"))[1])
-        self.assertEqual(run.run_slot("", stamp("18"), stamp("18")), ("evening", True))
+        self.assertEqual(run.run_slot("", stamp("18"), stamp("18"), "evening", "2026-11-15"), ("evening", True))
 
     def test_backup_successful_snapshot_and_unchanged_timestamp(self):
         rows = [row(day="2026-11-14"), row(), row("2")]

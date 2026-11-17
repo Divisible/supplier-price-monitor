@@ -12,15 +12,20 @@ KYIV = ZoneInfo("Europe/Kyiv")
 KEY = ("supplier", "sku")
 
 
-def run_slot(schedule, created, now):
+def run_slot(schedule, created, now, period=None, target_date=None):
     created, now = created.astimezone(KYIV), now.astimezone(KYIV)
     mode = {"30 9 * * *": "morning", "0 17 * * *": "evening"}.get(schedule)
     if schedule and mode is None:
         raise ValueError("Unknown schedule")
-    mode = mode or ("morning" if now.hour < 17 else "evening")
+    if not schedule and (period not in ("morning", "evening") or not target_date):
+        raise ValueError("Dispatch requires an explicit period and target date")
+    mode = mode or period
+    day = target_date or created.date().isoformat()
+    if day != datetime.fromisoformat(day).date().isoformat():
+        raise ValueError("Target date must be YYYY-MM-DD")
     # Reserve the workflow's 25-minute timeout before the next slot/day.
     start, end = (time(9, 30), time(16, 35)) if mode == "morning" else (time(17), time(23, 35))
-    allowed = created.date() == now.date() and start <= now.time() < end
+    allowed = created.date() == now.date() and day == now.date().isoformat() and start <= now.time() < end
     return mode, allowed
 
 
@@ -31,9 +36,10 @@ def read_rows(path):
         return list(csv.DictReader(stream))
 
 
-def prepare(root, work, schedule, created, now):
-    mode, allowed = run_slot(schedule, created, now)
-    meta = {"date": now.astimezone(KYIV).date().isoformat(), "mode": mode,
+def prepare(root, work, schedule, created, now, period=None, target_date=None, permit=True):
+    mode, allowed = run_slot(schedule, created, now, period, target_date)
+    allowed = allowed and permit
+    meta = {"date": target_date or created.astimezone(KYIV).date().isoformat(), "mode": mode,
             "started_at": now.isoformat(), "ref": os.environ.get("GITHUB_REF", "local")}
     if allowed:
         backup = work / "backup"
@@ -146,7 +152,15 @@ def main():
     now = datetime.now(KYIV)
     if args.action == "prepare":
         created = datetime.fromisoformat(os.environ["RUN_CREATED_AT"].replace("Z", "+00:00"))
-        meta, allowed = prepare(root, args.work, os.environ.get("RUN_SCHEDULE", ""), created, now)
+        schedule = os.environ.get("RUN_SCHEDULE", "")
+        period, day = os.environ.get("REQUESTED_PERIOD"), os.environ.get("TARGET_DATE")
+        mode, allowed = run_slot(schedule, created, now, period, day)
+        permit = True
+        if allowed and os.environ.get("SPM_GUARD") == "true":
+            from scheduler_guard import GitHub, may_collect
+            permit = may_collect(GitHub(), day or created.astimezone(KYIV).date().isoformat(), mode,
+                                 os.environ.get("RESERVE_REQUEST", ""))
+        meta, allowed = prepare(root, args.work, schedule, created, now, period, day, permit)
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             output.write(f"run={str(allowed).lower()}\nmode={meta['mode']}\ndate={meta['date']}\n")
         if not allowed:
