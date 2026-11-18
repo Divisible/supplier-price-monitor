@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
 
 import scheduler_guard as guard
 from collection_run import run_slot
@@ -206,9 +207,135 @@ class GuardTests(unittest.TestCase):
 
     def test_incomplete_pagination_is_not_empty(self):
         api = guard.GitHub()
-        with patch.object(api, "request", return_value=dict(total_count=2, workflow_runs=[])):
+        with patch.object(api, "request", return_value=(dict(total_count=2, workflow_runs=[]), "")):
             with self.assertRaises(guard.GitHubError):
                 api.listing("runs", "workflow_runs")
+
+
+class ListingTests(unittest.TestCase):
+    path = "actions/workflows/price-report.yml/runs"
+
+    def setUp(self):
+        self.env = patch.dict(guard.os.environ, ENV)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    @staticmethod
+    def response(data, next_page=None):
+        response = io.BytesIO(json.dumps(data).encode())
+        response.headers = {}
+        if next_page is not None:
+            response.headers["Link"] = f'<https://api.github.com/repositories/1/actions/runs?per_page=100&page={next_page}>; rel="next"'
+        return response
+
+    def listing(self):
+        return guard.GitHub().listing(self.path, "workflow_runs", branch="main", status="queued")
+
+    def test_empty_and_single_page(self):
+        for rows in ([], [{"id": 1}], [{"id": i} for i in range(100)]):
+            with self.subTest(size=len(rows)), patch.object(guard, "urlopen", return_value=self.response(dict(total_count=len(rows), workflow_runs=rows))) as request:
+                self.assertEqual(self.listing(), rows)
+                request.assert_called_once()
+
+    def test_multiple_pages_follow_link_preserving_filters(self):
+        rows = [{"id": i} for i in range(101)]
+        pages = [self.response(dict(total_count=101, workflow_runs=rows[:100]), 2),
+                 self.response(dict(total_count=101, workflow_runs=rows[100:]))]
+        with patch.object(guard, "urlopen", side_effect=pages) as request:
+            self.assertEqual(self.listing(), rows)
+        self.assertEqual(len(request.call_args_list), 2)
+        for page, call in enumerate(request.call_args_list, 1):
+            self.assertEqual(parse_qs(urlsplit(call.args[0].full_url).query),
+                             dict(branch=["main"], status=["queued"], per_page=["100"], page=[str(page)]))
+
+    def test_total_mismatch_and_incomplete_response_fail_closed(self):
+        cases = [None, [], {}, {"total_count": 0}, {"total_count": 0, "workflow_runs": None},
+                 {"workflow_runs": []}, {"total_count": "0", "workflow_runs": []},
+                 {"total_count": True, "workflow_runs": []}, {"total_count": -1, "workflow_runs": []},
+                 {"total_count": 1000, "workflow_runs": []}, {"total_count": 2, "workflow_runs": []},
+                 {"total_count": 0, "workflow_runs": [{"id": 1}]},
+                 {"total_count": 2, "workflow_runs": [{"id": 1}]}]
+        for data in cases:
+            with self.subTest(data=data), patch.object(guard, "urlopen", return_value=self.response(data)) as request:
+                with self.assertRaises(guard.GitHubError) as caught:
+                    self.listing()
+                message = str(caught.exception)
+                self.assertIn(f"endpoint={self.path}", message)
+                self.assertIn("per_page=100&page=1", message)
+                self.assertIn("status=queued", message)
+                self.assertNotIn(ENV["GITHUB_TOKEN"], message)
+                request.assert_called_once()  # No guessed next page or blind retry.
+
+    def test_changed_count_duplicate_and_empty_second_page(self):
+        for second in (dict(total_count=3, workflow_runs=[{"id": 2}]),
+                       dict(total_count=2, workflow_runs=[{"id": 1}]),
+                       dict(total_count=2, workflow_runs=[])):
+            pages = [self.response(dict(total_count=2, workflow_runs=[{"id": 1}]), 2), self.response(second)]
+            with self.subTest(second=second), patch.object(guard, "urlopen", side_effect=pages):
+                with self.assertRaises(guard.GitHubError) as caught:
+                    self.listing()
+                self.assertIn("page=2", str(caught.exception))
+
+    def test_invalid_or_contradictory_next_link(self):
+        for data, next_page in ((dict(total_count=0, workflow_runs=[]), 2),
+                                (dict(total_count=1, workflow_runs=[{"id": 1}]), 2),
+                                (dict(total_count=2, workflow_runs=[{"id": 1}]), 1)):
+            with self.subTest(data=data, next_page=next_page), patch.object(guard, "urlopen", return_value=self.response(data, next_page)):
+                with self.assertRaises(guard.GitHubError):
+                    self.listing()
+        response = self.response(dict(total_count=0, workflow_runs=[]))
+        response.headers["Link"] = 'unparseable test-secret'
+        with patch.object(guard, "urlopen", return_value=response):
+            with self.assertRaisesRegex(guard.GitHubError, "invalid pagination Link") as caught:
+                self.listing()
+            self.assertNotIn("test-secret", str(caught.exception))
+
+    def test_api_errors_and_invalid_json_are_safe_and_not_retried(self):
+        for error in (HTTPError("secret-url", 403, "test-secret", {}, None), TimeoutError("test-secret")):
+            with self.subTest(error=type(error)), patch.object(guard, "urlopen", side_effect=error) as request:
+                with self.assertRaises(guard.GitHubError) as caught:
+                    self.listing()
+                self.assertIn(f"endpoint={self.path}", str(caught.exception))
+                self.assertNotIn("test-secret", str(caught.exception))
+                self.assertNotIn("secret-url", str(caught.exception))
+                if isinstance(error, HTTPError):
+                    self.assertIn("HTTP 403", str(caught.exception))
+                request.assert_called_once()
+        with patch.object(guard, "urlopen", return_value=io.BytesIO(b'not JSON test-secret')):
+            with self.assertRaisesRegex(guard.GitHubError, "invalid JSON"):
+                self.listing()
+
+    def test_check_dispatches_only_after_complete_absence_evidence(self):
+        for scenario in ("missing", "active", "completed", "incomplete", "api_error"):
+            api = FakeGitHub()
+            api.listing = guard.GitHub().listing
+            def respond(request, **kwargs):
+                url = urlsplit(request.full_url)
+                status = parse_qs(url.query).get("status")
+                if scenario == "api_error":
+                    raise TimeoutError("test-secret")
+                if scenario == "incomplete":
+                    return self.response(dict(total_count=1, workflow_runs=[]))
+                if url.path.endswith("/jobs"):
+                    names = ("Collect prices", "Validate history boundaries and capture this collection",
+                             "Persist validated observations and diagnostics", "Confirm successful collection")
+                    return self.response(dict(total_count=1, jobs=[dict(id=2, name="collect", steps=[dict(name=n, conclusion="success") for n in names])]))
+                rows = []
+                if scenario == "active" and status == ["in_progress"]:
+                    rows = [dict(id=20)]
+                if scenario == "completed" and not status:
+                    rows = [dict(id=1, display_title=f"SPM collect | evening | {DAY}", status="completed")]
+                return self.response(dict(total_count=len(rows), workflow_runs=rows))
+            with self.subTest(scenario=scenario), patch.object(guard, "urlopen", side_effect=respond):
+                if scenario in ("incomplete", "api_error"):
+                    with self.assertRaises(guard.GitHubError):
+                        guard.check(api, "evening", stamp("17:20"), stamp("17:20"), "10-1")
+                else:
+                    result = guard.check(api, "evening", stamp("17:20"), stamp("17:20"), "10-1")
+                    self.assertEqual(result, "reserve requested" if scenario == "missing" else scenario)
+            self.assertEqual(len(api.dispatches), int(scenario == "missing"))
+            if scenario != "missing":
+                self.assertFalse(api.markers)
 
 
 if __name__ == "__main__":

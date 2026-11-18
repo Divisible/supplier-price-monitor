@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timedelta, time
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, parse_qs
 from urllib.request import Request, urlopen
 
 from collection_run import KYIV, run_slot
@@ -20,7 +20,7 @@ class GitHubError(RuntimeError):
 
 
 class GitHub:
-    def request(self, path, method="GET", body=None, missing=False, conflict=False):
+    def request(self, path, method="GET", body=None, missing=False, conflict=False, pagination=False):
         url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/{path}"
         headers = {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
                    "Accept": "application/vnd.github+json", "Content-Type": "application/json",
@@ -30,7 +30,8 @@ class GitHub:
                               data=json.dumps(body).encode() if body is not None else None)
             with urlopen(request, timeout=30) as response:
                 raw = response.read()
-                return json.loads(raw) if raw else {}
+                data = json.loads(raw) if raw else {}
+                return (data, response.headers.get("Link", "")) if pagination else data
         except HTTPError as exc:
             if missing and exc.code == 404:
                 return None
@@ -42,16 +43,59 @@ class GitHub:
 
     def listing(self, path, field, **params):
         rows = []
+        seen = set()
+        expected = None
         for page in range(1, 11):
-            data = self.request(path + "?" + urlencode(dict(params, per_page=100, page=page)))
-            if not isinstance(data.get(field), list) or data.get("total_count", 1000) >= 1000:
-                raise GitHubError("Incomplete GitHub listing")
-            rows.extend(data[field])
-            if len(rows) >= data["total_count"]:
+            query = dict(params, per_page=100, page=page)
+            # Log only known query fields, never headers, response bodies or Link URLs.
+            safe = {k: v for k, v in query.items() if k in ("branch", "status", "created", "filter", "per_page", "page")}
+            context = f"endpoint={path.split('?')[0]} params={urlencode(safe)}"
+
+            def fail(reason):
+                raise GitHubError(f"GitHub pagination: {context}; {reason}") from None
+
+            try:
+                data, link = self.request(path + "?" + urlencode(query), pagination=True)
+            except GitHubError as exc:
+                code = re.search(r"HTTP \d{3}", str(exc))
+                fail(code[0] if code else "API unavailable or invalid JSON; no automatic retry")
+            if not isinstance(data, dict) or not isinstance(data.get(field), list):
+                fail("missing or invalid result list")
+            total = data.get("total_count")
+            if type(total) is not int or total < 0:
+                fail("missing or invalid total_count")
+            if total >= 1000:
+                fail("total_count reaches API safety limit (1000)")
+            if expected is not None and total != expected:
+                fail(f"total_count changed: expected={expected} observed={total}")
+            expected = total
+            batch = data[field]
+            if len(batch) > 100:
+                fail("response exceeds per_page")
+            for row in batch:
+                if not isinstance(row, dict) or type(row.get("id")) is not int or row["id"] in seen:
+                    fail("missing, invalid or duplicate record id")
+                seen.add(row["id"])
+            rows.extend(batch)
+            next_pages = []
+            for part in link.split(",") if link else []:
+                match = re.fullmatch(r'\s*<([^<>]+)>;\s*rel="(next|prev|first|last)"\s*', part)
+                if not match:
+                    fail("invalid pagination Link")
+                if match[2] == "next":
+                    try:
+                        next_pages.append(parse_qs(urlsplit(match[1]).query).get("page"))
+                    except ValueError:
+                        fail("invalid next page URL")
+            if next_pages and next_pages != [[str(page + 1)]]:
+                fail("invalid next page")
+            if not next_pages:
+                if len(rows) != total:
+                    fail(f"terminal total_count mismatch: expected={total} received={len(rows)}")
                 return rows
-            if not data[field]:
-                break
-        raise GitHubError("Incomplete GitHub pagination")
+            if not batch or len(rows) >= total:
+                fail(f"next page contradicts response: expected={total} received={len(rows)}")
+        fail("page limit exceeded")
 
     def marker(self, kind, day, period):
         ref = self.request(f"git/ref/tags/spm-{kind}/{day}-{period}", missing=True)
