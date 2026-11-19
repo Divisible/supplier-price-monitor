@@ -550,7 +550,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-19,2026-11-19T09:56:23.871063+02:00,Варус,127810,"Помело вагове, кг",UAH,117.90,https://varus.ua/pomelo-vag,,0,false
 2026-11-19,2026-11-19T09:56:55.111370+02:00,Варус,128855,"Світі вагове, кг",UAH,139.90,https://varus.ua/sviti-vag,,0,false
 2026-11-19,2026-11-19T09:56:28.374362+02:00,Варус,128915,"Гранат ваговий, кг",UAH,117.90,https://varus.ua/granat-vag,129.9,9.24,true
-2026-11-19,2026-11-19T09:56:31.592128+02:00,Варус,128923,"Ківі вагове, кг",UAH,119.90,https://varus.ua/kivi-vag,,0,false
+2026-11-19,2026-11-19T17:25:07.729433+02:00,Варус,128923,"Ківі вагове, кг",UAH,99.90,https://varus.ua/kivi-vag,,0,false
 2026-11-19,2026-11-19T09:56:42.401941+02:00,Варус,128935,"Хурма Піраміда вагова, кг",UAH,149.90,https://varus.ua/hurma-vag,,0,false
 2026-11-19,2026-11-19T09:56:35.434092+02:00,Варус,128941,"Яблуко Гала вагове, кг",UAH,12.90,https://varus.ua/yabluko-gala-1-gatunok-vag,20.9,38.28,true
 2026-11-19,2026-11-19T09:56:33.684101+02:00,Варус,128951,"Яблуко Голден вагове, кг",UAH,24.90,https://varus.ua/yabluko-golden-1-gatunok-vag,29.9,16.72,true
@@ -562,7 +562,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-19,2026-11-19T09:56:16.345347+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,84.90,https://varus.ua/mandarin-vagovij2,,0,false
 2026-11-19,2026-11-19T09:56:38.388299+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-19,2026-11-19T09:56:56.569183+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,129.90,https://varus.ua/mandarin-klementin-vesovoj,,0,false
-2026-11-19,2026-11-19T09:54:31.780662+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,69.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
+2026-11-19,2026-11-19T17:23:18.629198+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,84.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
 2026-11-19,2026-11-19T09:55:32.680205+02:00,Фора,134544,"Ківі ваговий, кг",UAH,99.90,https://fora.ua/product/kivi-vagovyi-134544,109.90,9.10,true
 2026-11-19,2026-11-19T09:55:45.096974+02:00,Фора,142571,"Яблуко Гала, кг",UAH,19.90,https://fora.ua/product/yabluko-gala-142571,,0,false
 2026-11-19,2026-11-19T09:55:20.277987+02:00,Фора,24,"Гранат, кг",UAH,149.90,https://fora.ua/product/granat-24,,0,false
