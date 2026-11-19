@@ -523,3 +523,56 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-18,2026-11-18T09:53:20.939344+02:00,Фора,58480,"Яблуко Голден, кг",UAH,29.90,https://fora.ua/product/yabluko-golden-58480,39.90,25.06,true
 2026-11-18,2026-11-18T09:52:49.827608+02:00,Фора,837324,"Помело, кг",UAH,79.90,https://fora.ua/product/pomelo-837324,117.90,32.23,true
 2026-11-18,2026-11-18T09:53:08.482896+02:00,Фора,837334,"Хурма Шарон, кг",UAH,119.90,https://fora.ua/product/khurma-sharon-837334,149.90,20.01,true
+2026-11-19,2026-11-19T09:56:04.406797+02:00,АТБ,1077,"Мандарини, кг",UAH,74.90,https://www.atbmarket.com/product/mandarini-1gat,84.90,11.78,true
+2026-11-19,2026-11-19T09:56:11.048552+02:00,АТБ,134803,"Ківі Голд у кошику 0,5кг, шт",UAH,67.90,https://www.atbmarket.com/product/kivi-gold-u-kosiku-05kg?query=%D0%BA%D1%96%D0%B2%D1%96,,0,false
+2026-11-19,2026-11-19T09:56:05.971332+02:00,АТБ,14990,"Помело, кг",UAH,102.95,https://www.atbmarket.com/product/pomelo-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:39.747063+02:00,АТБ,155547,"Лимон Майер 1 гат, кг",UAH,82.95,https://www.atbmarket.com/product/limon-majer-1-gat,,0,false
+2026-11-19,2026-11-19T09:54:30.242732+02:00,АТБ,1580,"Томати тепличні, кг",UAH,119.89,https://www.atbmarket.com/product/tomati-teplicni-1-gatunok,,0,false
+2026-11-19,2026-11-19T09:54:26.121218+02:00,АТБ,15844,"Лимон, кг",UAH,82.95,https://www.atbmarket.com/product/limon-1-gat,,0,false
+2026-11-19,2026-11-19T09:54:28.527615+02:00,АТБ,16145,"Огірки, кг",UAH,159.89,https://www.atbmarket.com/product/ogirki-1-gat,,0,false
+2026-11-19,2026-11-19T09:54:29.452761+02:00,АТБ,22401,"Перець солодкий червоний, кг",UAH,159.89,https://www.atbmarket.com/product/perec-solodkij-cervonij-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:09.192202+02:00,АТБ,28499,"Яблуко Голден, кг",UAH,24.90,https://www.atbmarket.com/product/abluko-golden-1-gat,,0,false
+2026-11-19,2026-11-19T09:54:27.855109+02:00,АТБ,29,"Банан, кг",UAH,79.90,https://www.atbmarket.com/product/banan-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:07.493292+02:00,АТБ,29046,"Хурма Персимона, кг",UAH,107.95,https://www.atbmarket.com/product/hurma-persimona-1-gat,129.95,16.93,true
+2026-11-19,2026-11-19T09:56:40.349000+02:00,АТБ,30137,"Свiтi, кг",UAH,139.95,https://www.atbmarket.com/product/sviti-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:06.672726+02:00,АТБ,352,"Гранат, кг",UAH,107.90,https://www.atbmarket.com/product/granat-1gat,119.90,10.01,true
+2026-11-19,2026-11-19T09:56:05.311466+02:00,АТБ,353,"Грейпфрут, кг",UAH,74.90,https://www.atbmarket.com/product/grejpfrut-1gat,84.89,11.77,true
+2026-11-19,2026-11-19T09:54:27.060203+02:00,АТБ,39533,"Апельсин, кг",UAH,84.95,https://www.atbmarket.com/product/apelsin-vag-1-gat,94.90,10.48,true
+2026-11-19,2026-11-19T09:56:09.762566+02:00,АТБ,40330,"Яблуко Гала, кг",UAH,20.90,https://www.atbmarket.com/product/abluko-gala-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:38.979849+02:00,АТБ,57703,"Хурма Піраміда 1 гат, кг",UAH,109.95,https://www.atbmarket.com/product/hurma-piramida-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:08.208666+02:00,АТБ,578,"Ківі, кг",UAH,99.95,https://www.atbmarket.com/product/kivi-vagove-1gat,,0,false
+2026-11-19,2026-11-19T09:56:10.458500+02:00,АТБ,58505,"Яблуко Ред Чіф 1 гат, кг",UAH,29.90,https://www.atbmarket.com/product/abluko-red-cif-1-gat,,0,false
+2026-11-19,2026-11-19T09:56:11.897916+02:00,АТБ,73789,"Ківі у кошику 2 гат., шт",UAH,99.90,https://www.atbmarket.com/product/kivi-u-kosiku-2-gat?query=%D0%BA%D1%96%D0%B2%D1%96,,0,false
+2026-11-19,2026-11-19T09:56:41.069669+02:00,АТБ,95731,"Клементин 1 гат, кг",UAH,99.95,https://www.atbmarket.com/product/klementin-1-gat,,0,false
+2026-11-19,2026-11-19T09:54:34.644821+02:00,Варус,127622,Банан ваговий,UAH,79.90,https://varus.ua/banan-vag,,0,false
+2026-11-19,2026-11-19T09:54:33.245422+02:00,Варус,127797,Апельсин ваговий,UAH,94.90,https://varus.ua/apelsin-vag,,0,false
+2026-11-19,2026-11-19T09:56:22.158018+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,69.90,https://varus.ua/greypfrut-vag,84.9,17.67,true
+2026-11-19,2026-11-19T09:56:23.871063+02:00,Варус,127810,"Помело вагове, кг",UAH,117.90,https://varus.ua/pomelo-vag,,0,false
+2026-11-19,2026-11-19T09:56:55.111370+02:00,Варус,128855,"Світі вагове, кг",UAH,139.90,https://varus.ua/sviti-vag,,0,false
+2026-11-19,2026-11-19T09:56:28.374362+02:00,Варус,128915,"Гранат ваговий, кг",UAH,117.90,https://varus.ua/granat-vag,129.9,9.24,true
+2026-11-19,2026-11-19T09:56:31.592128+02:00,Варус,128923,"Ківі вагове, кг",UAH,119.90,https://varus.ua/kivi-vag,,0,false
+2026-11-19,2026-11-19T09:56:42.401941+02:00,Варус,128935,"Хурма Піраміда вагова, кг",UAH,149.90,https://varus.ua/hurma-vag,,0,false
+2026-11-19,2026-11-19T09:56:35.434092+02:00,Варус,128941,"Яблуко Гала вагове, кг",UAH,12.90,https://varus.ua/yabluko-gala-1-gatunok-vag,20.9,38.28,true
+2026-11-19,2026-11-19T09:56:33.684101+02:00,Варус,128951,"Яблуко Голден вагове, кг",UAH,24.90,https://varus.ua/yabluko-golden-1-gatunok-vag,29.9,16.72,true
+2026-11-19,2026-11-19T09:56:30.070478+02:00,Варус,159700,"Хурма Персимона солодка вагова, кг",UAH,109.90,https://varus.ua/hurma-persimona-vag,129.9,15.40,true
+2026-11-19,2026-11-19T09:54:38.272069+02:00,Варус,2507408,Огірок тепличний ваговий,UAH,159.90,https://varus.ua/ogirok-teplichniy-1-gatunok-vag,,0,false
+2026-11-19,2026-11-19T09:54:42.882625+02:00,Варус,2544821,Перець червоний ваговий,UAH,169.90,https://varus.ua/perec-chervoniy-1-gatunok-vag,,0,false
+2026-11-19,2026-11-19T09:56:49.787568+02:00,Варус,2573109,"Лимон Мейер ваговий, кг",UAH,69.90,https://varus.ua/limon-meyer-vag,84.9,17.67,true
+2026-11-19,2026-11-19T09:54:49.142990+02:00,Варус,2607223,Томат ваговий,UAH,109.90,https://varus.ua/pomidor-na-giltsivag,,0,false
+2026-11-19,2026-11-19T09:56:16.345347+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,84.90,https://varus.ua/mandarin-vagovij2,,0,false
+2026-11-19,2026-11-19T09:56:38.388299+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
+2026-11-19,2026-11-19T09:56:56.569183+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,129.90,https://varus.ua/mandarin-klementin-vesovoj,,0,false
+2026-11-19,2026-11-19T09:54:31.780662+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,69.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
+2026-11-19,2026-11-19T09:55:32.680205+02:00,Фора,134544,"Ківі ваговий, кг",UAH,99.90,https://fora.ua/product/kivi-vagovyi-134544,109.90,9.10,true
+2026-11-19,2026-11-19T09:55:45.096974+02:00,Фора,142571,"Яблуко Гала, кг",UAH,19.90,https://fora.ua/product/yabluko-gala-142571,,0,false
+2026-11-19,2026-11-19T09:55:20.277987+02:00,Фора,24,"Гранат, кг",UAH,149.90,https://fora.ua/product/granat-24,,0,false
+2026-11-19,2026-11-19T09:54:06.253991+02:00,Фора,32485,"Банан, кг",UAH,79.80,https://fora.ua/product/banan-32485,,0,false
+2026-11-19,2026-11-19T09:54:12.453477+02:00,Фора,32547,"Огірок, кг",UAH,149.00,https://fora.ua/product/ogirok-32547,,0,false
+2026-11-19,2026-11-19T09:55:01.563401+02:00,Фора,32549,"Грейпфрут, кг",UAH,74.90,https://fora.ua/product/greipfrut-32549,,0,false
+2026-11-19,2026-11-19T09:54:55.347287+02:00,Фора,32551,"Мандарин, кг",UAH,79.90,https://fora.ua/product/mandaryn-32551,,0,false
+2026-11-19,2026-11-19T09:54:24.943627+02:00,Фора,32589,"Томат, кг",UAH,119.00,https://fora.ua/product/tomat-32589,,0,false
+2026-11-19,2026-11-19T09:54:18.661345+02:00,Фора,32887,"Перець червоний, кг",UAH,169.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
+2026-11-19,2026-11-19T09:55:57.512091+02:00,Фора,340212,"Ківі Голд кошик, шт",UAH,59.90,https://fora.ua/product/kivi-gold-koshyk-340212,,0,false
+2026-11-19,2026-11-19T09:55:38.896579+02:00,Фора,58480,"Яблуко Голден, кг",UAH,29.90,https://fora.ua/product/yabluko-golden-58480,,0,false
+2026-11-19,2026-11-19T09:55:07.768456+02:00,Фора,837324,"Помело, кг",UAH,79.90,https://fora.ua/product/pomelo-837324,,0,false
+2026-11-19,2026-11-19T09:55:26.479835+02:00,Фора,837334,"Хурма Шарон, кг",UAH,104.90,https://fora.ua/product/khurma-sharon-837334,,0,false
