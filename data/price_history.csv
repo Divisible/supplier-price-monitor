@@ -597,7 +597,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-20,2026-11-20T09:54:18.738139+02:00,АТБ,58505,"Яблуко Ред Чіф 1 гат, кг",UAH,24.90,https://www.atbmarket.com/product/abluko-red-cif-1-gat,,0,false
 2026-11-20,2026-11-20T09:54:20.858775+02:00,АТБ,73789,"Ківі у кошику 2 гат., шт",UAH,84.90,https://www.atbmarket.com/product/kivi-u-kosiku-2-gat?query=%D0%BA%D1%96%D0%B2%D1%96,99.90,15.02,true
 2026-11-20,2026-11-20T09:54:50.620653+02:00,АТБ,95731,"Клементин 1 гат, кг",UAH,99.95,https://www.atbmarket.com/product/klementin-1-gat,,0,false
-2026-11-20,2026-11-20T09:52:46.973724+02:00,Варус,127622,Банан ваговий,UAH,79.90,https://varus.ua/banan-vag,,0,false
+2026-11-20,2026-11-20T17:22:40.171192+02:00,Варус,127622,Банан ваговий,UAH,75.90,https://varus.ua/banan-vag,79.9,5.01,true
 2026-11-20,2026-11-20T09:52:44.500099+02:00,Варус,127797,Апельсин ваговий,UAH,94.90,https://varus.ua/apelsin-vag,,0,false
 2026-11-20,2026-11-20T09:54:26.066795+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,69.90,https://varus.ua/greypfrut-vag,84.9,17.67,true
 2026-11-20,2026-11-20T09:54:29.095975+02:00,Варус,127810,"Помело вагове, кг",UAH,102.90,https://varus.ua/pomelo-vag,,0,false
@@ -612,7 +612,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-20,2026-11-20T09:52:51.502373+02:00,Варус,2544821,Перець червоний ваговий,UAH,169.90,https://varus.ua/perec-chervoniy-1-gatunok-vag,,0,false
 2026-11-20,2026-11-20T09:54:56.000253+02:00,Варус,2573109,"Лимон Мейер ваговий, кг",UAH,69.90,https://varus.ua/limon-meyer-vag,84.9,17.67,true
 2026-11-20,2026-11-20T09:52:53.644904+02:00,Варус,2607223,Томат ваговий,UAH,129.90,https://varus.ua/pomidor-na-giltsivag,,0,false
-2026-11-20,2026-11-20T09:54:23.508526+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,84.90,https://varus.ua/mandarin-vagovij2,,0,false
+2026-11-20,2026-11-20T17:24:12.113693+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,69.90,https://varus.ua/mandarin-vagovij2,84.9,17.67,true
 2026-11-20,2026-11-20T09:54:47.078257+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-20,2026-11-20T09:55:00.586961+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,129.90,https://varus.ua/mandarin-klementin-vesovoj,,0,false
 2026-11-20,2026-11-20T09:52:41.401625+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,82.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
