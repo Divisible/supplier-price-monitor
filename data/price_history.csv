@@ -789,5 +789,6 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-23,2026-11-23T09:52:26.531695+02:00,Фора,32547,"Огірок, кг",UAH,169.00,https://fora.ua/product/ogirok-32547,,0,false
 2026-11-23,2026-11-23T09:52:32.779966+02:00,Фора,32887,"Перець червоний, кг",UAH,169.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
 2026-11-23,2026-11-23T09:54:04.250931+02:00,Фора,340212,"Ківі Голд кошик, шт",UAH,59.90,https://fora.ua/product/kivi-gold-koshyk-340212,79.90,25.03,true
+2026-11-23,2026-11-23T17:23:50.333521+02:00,Фора,58480,"Яблуко Голден, кг",UAH,29.90,https://fora.ua/product/yabluko-golden-58480,39.90,25.06,true
 2026-11-23,2026-11-23T09:53:14.258632+02:00,Фора,837324,"Помело, кг",UAH,79.90,https://fora.ua/product/pomelo-837324,117.90,32.23,true
 2026-11-23,2026-11-23T09:53:33.011466+02:00,Фора,837334,"Хурма Шарон, кг",UAH,107.90,https://fora.ua/product/khurma-sharon-837334,,0,false
