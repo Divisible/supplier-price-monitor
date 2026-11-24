@@ -830,7 +830,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-24,2026-11-24T09:59:47.382822+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,84.90,https://varus.ua/mandarin-vagovij2,,0,false
 2026-11-24,2026-11-24T10:00:07.040426+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
 2026-11-24,2026-11-24T10:00:19.514423+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,99.90,https://varus.ua/mandarin-klementin-vesovoj,,0,false
-2026-11-24,2026-11-24T09:58:09.553085+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,84.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
+2026-11-24,2026-11-24T17:22:52.182968+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,82.90,https://varus.ua/limon-biberciler-interdonato-vagovij,,0,false
 2026-11-24,2026-11-24T09:59:03.993402+02:00,Фора,134544,"Ківі ваговий, кг",UAH,99.90,https://fora.ua/product/kivi-vagovyi-134544,109.90,9.10,true
 2026-11-24,2026-11-24T09:59:16.493039+02:00,Фора,142571,"Яблуко Гала, кг",UAH,19.90,https://fora.ua/product/yabluko-gala-142571,24.90,20.08,true
 2026-11-24,2026-11-24T09:58:45.250361+02:00,Фора,144184,"Лайм, кг",UAH,339.90,https://fora.ua/product/laim-144184,,0,false
@@ -839,6 +839,8 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-24,2026-11-24T09:59:35.251772+02:00,Фора,32507,"Ківі кошик, шт",UAH,99.90,https://fora.ua/product/kivi-koshyk-32507,,0,false
 2026-11-24,2026-11-24T09:57:34.749884+02:00,Фора,32546,"Апельсин, кг",UAH,79.90,https://fora.ua/product/apelsyn-32546,89.90,11.12,true
 2026-11-24,2026-11-24T09:57:47.332964+02:00,Фора,32547,"Огірок, кг",UAH,169.00,https://fora.ua/product/ogirok-32547,,0,false
+2026-11-24,2026-11-24T17:22:13.356420+02:00,Фора,32550,"Лимон, кг",UAH,84.90,https://fora.ua/product/lymon-32550,,0,false
+2026-11-24,2026-11-24T17:23:10.158126+02:00,Фора,32551,"Мандарин, кг",UAH,69.90,https://fora.ua/product/mandaryn-32551,84.90,17.67,true
 2026-11-24,2026-11-24T09:57:53.577693+02:00,Фора,32887,"Перець червоний, кг",UAH,179.00,https://fora.ua/product/perets-chervonyi-32887,,0,false
 2026-11-24,2026-11-24T09:59:29.001374+02:00,Фора,340212,"Ківі Голд кошик, шт",UAH,59.90,https://fora.ua/product/kivi-gold-koshyk-340212,79.90,25.03,true
 2026-11-24,2026-11-24T09:59:10.243433+02:00,Фора,58480,"Яблуко Голден, кг",UAH,29.90,https://fora.ua/product/yabluko-golden-58480,39.90,25.06,true
