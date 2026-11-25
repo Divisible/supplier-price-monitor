@@ -866,7 +866,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-25,2026-11-25T09:54:13.900126+02:00,АТБ,58505,"Яблуко Ред Чіф 1 гат, кг",UAH,24.90,https://www.atbmarket.com/product/abluko-red-cif-1-gat,,0,false
 2026-11-25,2026-11-25T09:54:16.410297+02:00,АТБ,73789,"Ківі у кошику 2 гат., шт",UAH,98.90,https://www.atbmarket.com/product/kivi-u-kosiku-2-gat?query=%D0%BA%D1%96%D0%B2%D1%96,,0,false
 2026-11-25,2026-11-25T09:54:46.193114+02:00,АТБ,95731,"Клементин 1 гат, кг",UAH,99.95,https://www.atbmarket.com/product/klementin-1-gat,,0,false
-2026-11-25,2026-11-25T09:52:39.247971+02:00,Варус,127622,Банан ваговий,UAH,79.90,https://varus.ua/banan-vag,,0,false
+2026-11-25,2026-11-25T17:22:45.237016+02:00,Варус,127622,Банан ваговий,UAH,69.90,https://varus.ua/banan-vag,79.9,12.52,true
 2026-11-25,2026-11-25T09:52:35.030366+02:00,Варус,127797,Апельсин ваговий,UAH,94.90,https://varus.ua/apelsin-vag,,0,false
 2026-11-25,2026-11-25T09:54:22.801896+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,69.90,https://varus.ua/greypfrut-vag,84.9,17.67,true
 2026-11-25,2026-11-25T09:54:24.816541+02:00,Варус,127810,"Помело вагове, кг",UAH,102.90,https://varus.ua/pomelo-vag,,0,false
