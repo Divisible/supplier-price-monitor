@@ -976,7 +976,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-27,2026-11-27T09:55:04.130743+02:00,АТБ,95731,"Клементин 1 гат, кг",UAH,99.95,https://www.atbmarket.com/product/klementin-1-gat,,0,false
 2026-11-27,2026-11-27T09:53:03.989466+02:00,Варус,127622,Банан ваговий,UAH,69.90,https://varus.ua/banan-vag,79.9,12.52,true
 2026-11-27,2026-11-27T09:53:01.272386+02:00,Варус,127797,Апельсин ваговий,UAH,79.90,https://varus.ua/apelsin-vag,94.9,15.81,true
-2026-11-27,2026-11-27T09:54:38.635665+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,84.90,https://varus.ua/greypfrut-vag,,0,false
+2026-11-27,2026-11-27T17:24:08.420605+02:00,Варус,127803,"Грейпфрут ваговий, кг",UAH,59.90,https://varus.ua/greypfrut-vag,84.9,29.45,true
 2026-11-27,2026-11-27T09:54:42.252203+02:00,Варус,127810,"Помело вагове, кг",UAH,102.90,https://varus.ua/pomelo-vag,,0,false
 2026-11-27,2026-11-27T09:55:13.365130+02:00,Варус,128855,"Світі вагове, кг",UAH,139.90,https://varus.ua/sviti-vag,,0,false
 2026-11-27,2026-11-27T09:54:45.025848+02:00,Варус,128915,"Гранат ваговий, кг",UAH,119.90,https://varus.ua/granat-vag,,0,false
@@ -991,7 +991,7 @@ date,checked_at,supplier,sku,product,currency,price,url,regular_price,discount_p
 2026-11-27,2026-11-27T09:53:09.700213+02:00,Варус,2607223,Томат ваговий,UAH,139.90,https://varus.ua/pomidor-na-giltsivag,,0,false
 2026-11-27,2026-11-27T09:54:35.796319+02:00,Варус,2622179,"Мандарин Сатсума ваговий, кг",UAH,69.90,https://varus.ua/mandarin-vagovij2,84.9,17.67,true
 2026-11-27,2026-11-27T09:55:00.040212+02:00,Варус,2640506,"Ківі Голд в кошику, шт",UAH,79.90,https://varus.ua/kivi-gold-v-korzinke,,0,false
-2026-11-27,2026-11-27T09:55:15.382536+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,99.90,https://varus.ua/mandarin-klementin-vesovoj,,0,false
+2026-11-27,2026-11-27T17:24:38.422696+02:00,Варус,2641677,"Мандарин Клементин, ваговий, кг",UAH,89.90,https://varus.ua/mandarin-klementin-vesovoj,99.9,10.01,true
 2026-11-27,2026-11-27T09:52:58.273318+02:00,Варус,2649124,Лимон Інтердонато ваговий,UAH,74.90,https://varus.ua/limon-biberciler-interdonato-vagovij,84.9,11.78,true
 2026-11-27,2026-11-27T09:53:53.456942+02:00,Фора,134544,"Ківі ваговий, кг",UAH,109.90,https://fora.ua/product/kivi-vagovyi-134544,,0,false
 2026-11-27,2026-11-27T09:53:34.682118+02:00,Фора,144184,"Лайм, кг",UAH,339.90,https://fora.ua/product/laim-144184,,0,false
